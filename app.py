@@ -30,7 +30,7 @@ code,pre{background:#1c1c1f;padding:.15em .4em;border-radius:4px}pre{padding:1em
 <h1>PaperStream Intel</h1>
 <p>Free address lookups for anti-VPN plugins, no key needed. Used by <a href="https://modrinth.com/plugin/proxyshield">ProxyShield</a>,
 open to everyone.</p>
-<pre>GET /v1/ip/{ip}
+<pre>GET /v1/ip/{ip}      (GET /v1/me answers for the address that asks)
 
 {"ip":"203.0.113.9","country":"DE","asn":3320,"network":"end_user",
  "vpn":false,"proxy":false,"tor":false,"hosting":false,"seen_by":0,"community":false}</pre>
@@ -138,10 +138,7 @@ def create_app(data_dir=None, datasets_dir=None):
                                (today() - RETENTION_DAYS,)).fetchone()[0]
         return jsonify(dict(datasets().summary(), reported_addresses=count))
 
-    @app.get("/v1/ip/<text>")
-    def lookup(text):
-        if limited("lookup", LOOKUPS_PER_MINUTE):
-            return too_many()
+    def answer(text):
         try:
             address = ipaddress.ip_address(text)
         except ValueError:
@@ -153,6 +150,22 @@ def create_app(data_dir=None, datasets_dir=None):
         seen = sightings(str(address))
         result.update(seen_by=seen, community=seen >= COMMUNITY_SERVERS)
         return jsonify(result)
+
+    @app.get("/v1/ip/<text>")
+    def lookup(text):
+        if limited("lookup", LOOKUPS_PER_MINUTE):
+            return too_many()
+        return answer(text)
+
+    @app.get("/v1/me")
+    def me():
+        """The verdict on the address that asks, for the website's "Your IP" button. Nothing is stored."""
+        if limited("lookup", LOOKUPS_PER_MINUTE):
+            return too_many()
+        address = request.remote_addr or ""
+        if address == "127.0.0.1":
+            address = request.headers.get("X-Real-IP") or address
+        return answer(address)
 
     @app.get("/feed/asn-feed.tsv.gz")
     def feed():

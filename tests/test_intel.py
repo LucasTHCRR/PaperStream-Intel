@@ -66,6 +66,17 @@ class IntelTest(unittest.TestCase):
         self.assertEqual(self.ip("192.168.1.5")[1]["network"], "private")
         self.assertEqual(self.ip("nonsense")[0], 422)
 
+    def test_me_answers_for_the_caller(self):
+        response = self.client.get("/v1/me", environ_overrides={"REMOTE_ADDR": "51.75.1.1"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual((response.get_json()["ip"], response.get_json()["hosting"]), ("51.75.1.1", True))
+        proxied = self.client.get("/v1/me", headers={"X-Real-IP": "80.187.100.44"},
+                                  environ_overrides={"REMOTE_ADDR": "127.0.0.1"})
+        self.assertEqual(proxied.get_json()["network"], "end_user")
+        direct = self.client.get("/v1/me", headers={"X-Real-IP": "80.187.100.44"},
+                                 environ_overrides={"REMOTE_ADDR": "9.9.9.9"})
+        self.assertEqual(direct.get_json()["ip"], "9.9.9.9", "the header only counts from the local proxy")
+
     def test_rate_limit(self):
         original = intel.LOOKUPS_PER_MINUTE
         intel.LOOKUPS_PER_MINUTE = 3
