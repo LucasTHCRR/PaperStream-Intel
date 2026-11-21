@@ -6,7 +6,7 @@ import pathlib
 import re
 
 LISTS = ("vpn", "datacenter", "tor", "proxy")
-KINDS = {"E": "end_user", "H": "hosting"}
+KINDS = {"E": "end_user", "H": "hosting", "N": "no_users"}
 ENTRY = re.compile(r"^(?:[a-z0-9+.-]+://)?(\[[0-9a-fA-F:]+\]|[0-9a-fA-F]*:[0-9a-fA-F:]+|[0-9.]+)(?::\d+)?(?:/(\d+))?")
 
 
@@ -73,7 +73,8 @@ def read_list(path):
 
 
 class Feed:
-    """Lines "start end class country asn version", class E (end users) or H (hosting-like)."""
+    """Lines "start end class country asn version": E many end users, S small access network, H hosting-like,
+    N no measured end users."""
 
     def __init__(self, path):
         self.rows = {4: ([], []), 6: ([], [])}
@@ -125,7 +126,7 @@ class Datasets:
             "vpn": self.lists["vpn"].contains(address),
             "proxy": self.lists["proxy"].contains(address),
             "tor": self.lists["tor"].contains(address),
-            "hosting": kind == "H" or self.lists["datacenter"].contains(address),
+            "hosting": kind in ("H", "N") or self.lists["datacenter"].contains(address),
         }
 
     def summary(self):

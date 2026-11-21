@@ -11,9 +11,12 @@ import app as intel  # noqa: E402
 from datasets import Datasets, parse_entry  # noqa: E402
 
 FEED = ("# PaperStream network feed.\n# built 2026-11-21; E end-user network, H hosting-like\n"
-        "{a}\t{b}\tE\tDE\t3320\t4\n{c}\t{d}\tH\tFR\t16276\t4\n").format(
+        "{a}\t{b}\tE\tDE\t3320\t4\n{c}\t{d}\tH\tFR\t16276\t4\n"
+        "{e}\t{f}\tN\tDE\t58087\t4\n{g}\t{h}\tS\tNL\t9009\t4\n").format(
     a=int(ipaddress.ip_address("80.187.0.0")), b=int(ipaddress.ip_address("80.187.255.255")),
-    c=int(ipaddress.ip_address("51.75.0.0")), d=int(ipaddress.ip_address("51.75.255.255")))
+    c=int(ipaddress.ip_address("51.75.0.0")), d=int(ipaddress.ip_address("51.75.255.255")),
+    e=int(ipaddress.ip_address("45.133.74.0")), f=int(ipaddress.ip_address("45.133.74.255")),
+    g=int(ipaddress.ip_address("84.22.0.0")), h=int(ipaddress.ip_address("84.22.255.255")))
 IVPN = "45.133.193.0/24\n"
 
 
@@ -60,6 +63,12 @@ class IntelTest(unittest.TestCase):
         self.assertTrue(self.ip("2606:4700::1")[1]["proxy"])
         self.assertTrue(self.ip("2a00:1450:1::5")[1]["vpn"])
         self.assertFalse(self.ip("45.133.194.1")[1]["vpn"])
+
+    def test_networks_without_users_count_as_hosting_and_small_ones_are_not_judged(self):
+        code, body = self.ip("45.133.74.209")
+        self.assertEqual((body["network"], body["country"], body["asn"], body["hosting"]), ("no_users", "DE", 58087, True))
+        body = self.ip("84.22.1.1")[1]
+        self.assertEqual((body["network"], body["country"], body["asn"], body["hosting"]), ("unknown", "NL", 9009, False))
 
     def test_unknown_private_and_invalid(self):
         self.assertEqual(self.ip("9.9.9.9")[1]["network"], "unknown")

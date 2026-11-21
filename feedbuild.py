@@ -3,8 +3,9 @@
 Inputs (all public):
   * iptoasn.com ip2asn-combined: address range -> ASN, country, description (public domain)
   * APNIC aspop: estimated users per ASN and country (APNIC, re-use with attribution)
-Output: out/asn-feed.tsv.gz with lines "start<TAB>end<TAB>class<TAB>cc<TAB>asn", class E for
-networks that serve many end users and H for hosting-like networks. Anything else is left out.
+Output: out/asn-feed.tsv.gz with lines "start<TAB>end<TAB>class<TAB>cc<TAB>asn<TAB>version" for every
+announced range. Class E: serves many end users (>= 50,000 estimated). H: hosting-like. N: APNIC measured
+no users there at all. S: everything else, small access networks and networks without a clear answer.
 """
 import csv
 import os
@@ -45,19 +46,26 @@ def fetch(url, name, max_age=86400):
 
 
 def eyeball_asns(countries):
+    """Per (ASN, country): the ones with at least MIN_USERS estimated users, the ones with any users at
+    all, and the countries APNIC answered for (without an answer nothing can be said about "no users")."""
     users = {}
+    seen = set()
+    answered = set()
     for index, cc in enumerate(sorted(countries)):
         try:
             raw = fetch(f"https://stats.labs.apnic.net/cgi-bin/aspop?c={cc}&f=j", f"aspop-{cc}.json", 7 * 86400)
             for row in json.loads(raw)["Data"]:
+                if row.get("Users", 0) > 0:
+                    seen.add((int(row["AS"]), cc))
                 # per country: a hosting network gets "users" in other countries from the VPN traffic leaving it
                 if row.get("Users", 0) >= MIN_USERS:
                     users[(int(row["AS"]), cc)] = row["Users"]
+            answered.add(cc)
         except Exception as error:  # a missing country only costs that country's eyeball flags
             print("aspop", cc, "failed:", str(error)[:80], file=sys.stderr)
         if index % 20 == 0:
             print("aspop", index, "/", len(countries), file=sys.stderr, flush=True)
-    return users
+    return users, seen, answered
 
 
 def main():
@@ -67,11 +75,13 @@ def main():
     with gzip.open(io.BytesIO(raw), "rt", encoding="utf-8", errors="replace") as handle:
         for line in csv.reader(handle, delimiter="\t"):
             start, end, asn, cc, description = line[:5]
-            if asn == "0" or cc in ("None", ""):
+            if asn == "0":
                 continue
+            cc = "ZZ" if cc in ("None", "") else cc
             rows.append((start, end, int(asn), cc, description))
             countries.add(cc)
-    users = eyeball_asns(countries)
+    countries.discard("ZZ")
+    users, seen, answered = eyeball_asns(countries)
 
     out = []
     for start, end, asn, cc, description in rows:
@@ -81,8 +91,10 @@ def main():
             kind = "H"
         elif (asn, cc) in users:
             kind = "E"
+        elif cc in answered and (asn, cc) not in seen and not ISPISH.search(description):
+            kind = "N"  # APNIC measured nobody there: not a network players connect from
         else:
-            continue
+            kind = "S"
         out.append((int(ipaddress.ip_address(start)), int(ipaddress.ip_address(end)), kind, cc, asn,
                     ipaddress.ip_address(start).version))
     out.sort()
