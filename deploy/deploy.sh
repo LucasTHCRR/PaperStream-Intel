@@ -38,7 +38,6 @@ scp -q -i $KEY "$SRC/deploy/paperstream-intel.service" $HOST:/etc/systemd/system
 scp -q -i $KEY "$SRC/deploy/nginx-intel.conf" $HOST:/etc/nginx/sites-available/paperstream-intel.conf
 $SSH 'ln -sf /etc/nginx/sites-available/paperstream-intel.conf /etc/nginx/sites-enabled/paperstream-intel.conf; nginx -t && systemctl reload nginx'
 $SSH 'systemctl daemon-reload && systemctl enable paperstream-intel && systemctl restart paperstream-intel && sleep 2 && systemctl is-active paperstream-intel'
-echo "Fertig. Einrichtungscode: $SSH 'journalctl -u paperstream-intel | grep \"SETUP CODE\"'"
 
 # Naechtlicher Datenabruf (Listen und Feed), beim ersten Mal sofort starten
 scp -q -i $KEY "$SRC/deploy/paperstream-intel-refresh.service" "$SRC/deploy/paperstream-intel-refresh.timer" $HOST:/etc/systemd/system/
