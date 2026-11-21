@@ -1,0 +1,10 @@
+[Unit]
+Description=Refresh the PaperStream intel data every night
+
+[Timer]
+OnCalendar=*-*-* 03:20:00
+RandomizedDelaySec=600
+Persistent=true
+
+[Install]
+WantedBy=timers.target

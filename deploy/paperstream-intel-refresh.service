@@ -1,0 +1,17 @@
+[Unit]
+Description=PaperStream intel data refresh
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=paperstream-intel
+Group=paperstream-intel
+WorkingDirectory=/opt/paperstream-intel
+Environment=INTEL_DATA=/var/lib/paperstream-intel
+ExecStart=/opt/paperstream-intel/venv/bin/python refresh.py
+TimeoutStartSec=1800
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/paperstream-intel

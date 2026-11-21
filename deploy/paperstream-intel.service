@@ -1,0 +1,19 @@
+[Unit]
+Description=PaperStream intel service
+After=network.target
+
+[Service]
+User=paperstream-intel
+Group=paperstream-intel
+WorkingDirectory=/opt/paperstream-intel
+Environment=INTEL_DATA=/var/lib/paperstream-intel
+ExecStart=/opt/paperstream-intel/venv/bin/gunicorn --bind 127.0.0.1:5110 --workers 1 --threads 8 --access-logfile /dev/null --error-logfile - run:app
+Restart=on-failure
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/paperstream-intel
+
+[Install]
+WantedBy=multi-user.target
