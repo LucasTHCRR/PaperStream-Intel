@@ -12,7 +12,7 @@ import sqlite3
 import threading
 import time
 
-from flask import Flask, Response, jsonify, request, send_file
+from flask import redirect, Flask, Response, jsonify, request, send_file
 
 from datasets import Datasets
 
@@ -24,27 +24,6 @@ REPORTS_PER_DAY = 2000
 RETENTION_DAYS = 14
 COMMUNITY_SERVERS = 3
 INSTALL = re.compile(r"^[0-9a-f]{32,64}$")
-
-PAGE = """<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>PaperStream Intel</title>
-<style>body{font:16px/1.5 system-ui,sans-serif;max-width:42rem;margin:2rem auto;padding:0 1rem;background:#111;color:#ddd}
-code,pre{background:#1c1c1f;padding:.15em .4em;border-radius:4px}pre{padding:1em;overflow:auto}a{color:#4ade80}</style>
-<h1>PaperStream Intel</h1>
-<p>Free address lookups for anti-VPN plugins, no key needed. Used by <a href="https://modrinth.com/plugin/proxyshield">ProxyShield</a>,
-open to everyone.</p>
-<pre>GET /v1/ip/{ip}      (GET /v1/me answers for the address that asks)
-
-{"ip":"203.0.113.9","country":"DE","asn":3320,"network":"end_user",
- "vpn":false,"proxy":false,"tor":false,"hosting":false,"seen_by":0,"community":false}</pre>
-<p><code>network</code> is <code>end_user</code>, <code>hosting</code>, <code>no_users</code> (nobody measured there, reported but not called hosting) or <code>unknown</code>. <code>vpn</code>, <code>proxy</code> and
-<code>tor</code> come from public lists, <code>hosting</code> from the network feed and a datacenter list. <code>seen_by</code> counts the
-ProxyShield servers that reported the address in the last 14 days, <code>community</code> is true from 3 servers.</p>
-<p><code>/v1/stats?days=7</code> gives the totals of answered lookups for the last 7 days (without <code>days</code> for all time) together with the size of every dataset,
-<code>/v1/stats/daily?days=30</code> the answered lookups per day.</p>
-<p>Limit: 600 requests a minute per address, answered with 429 and <code>Retry-After</code>. The network feed for offline use is
-<a href="/feed/asn-feed.tsv.gz">/feed/asn-feed.tsv.gz</a> (iptoasn.com, public domain, and APNIC aspop).</p>
-<p>Reporting is off by default and has to be switched on by the server owner. Details in the
-<a href="https://paperstream.dev/datenschutz">privacy policy</a>. Contact: support@paperstream.dev</p>"""
 
 
 def create_app(data_dir=None, datasets_dir=None):
@@ -190,7 +169,7 @@ def create_app(data_dir=None, datasets_dir=None):
 
     @app.get("/")
     def index():
-        return Response(PAGE, mimetype="text/html")
+        return redirect("https://paperstream.dev/api", code=302)
 
     @app.get("/health")
     def health():
