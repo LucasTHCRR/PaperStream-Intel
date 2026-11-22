@@ -35,6 +35,7 @@ class IntelTest(unittest.TestCase):
             handle.write(FEED)
         write(os.path.join(sets, "vpn.txt"), "# list\n" + IVPN + "2a00:1450:1::/48\n")
         write(os.path.join(sets, "tor.txt"), "185.220.101.1\n")
+        write(os.path.join(sets, "operators.txt"), "5.6.7.8\n2a07:d883:703:3::f001\n")
         write(os.path.join(sets, "proxy.txt"), "socks5://8.8.4.4:1080\n[2606:4700::1]:8080\n")
         write(os.path.join(sets, "datacenter.txt"), "34.120.0.0/24\n")
         self.app = intel.create_app(data)
@@ -63,10 +64,12 @@ class IntelTest(unittest.TestCase):
         self.assertTrue(self.ip("2606:4700::1")[1]["proxy"])
         self.assertTrue(self.ip("2a00:1450:1::5")[1]["vpn"])
         self.assertFalse(self.ip("45.133.194.1")[1]["vpn"])
+        self.assertTrue(self.ip("5.6.7.8")[1]["vpn"])
+        self.assertTrue(self.ip("2a07:d883:703:3::f001")[1]["vpn"])
 
-    def test_networks_without_users_count_as_hosting_and_small_ones_are_not_judged(self):
+    def test_networks_without_users_are_reported_but_not_called_hosting(self):
         code, body = self.ip("45.133.74.209")
-        self.assertEqual((body["network"], body["country"], body["asn"], body["hosting"]), ("no_users", "DE", 58087, True))
+        self.assertEqual((body["network"], body["country"], body["asn"], body["hosting"]), ("no_users", "DE", 58087, False))
         body = self.ip("84.22.1.1")[1]
         self.assertEqual((body["network"], body["country"], body["asn"], body["hosting"]), ("unknown", "NL", 9009, False))
 
@@ -152,6 +155,11 @@ class IntelTest(unittest.TestCase):
         self.assertTrue(gzip.decompress(first.data).startswith(b"# PaperStream"))
         again = self.client.get("/feed/asn-feed.tsv.gz", headers={"If-None-Match": first.headers["ETag"]})
         self.assertEqual(again.status_code, 304)
+
+    def test_operator_relays_download(self):
+        response = self.client.get("/feed/operators.txt")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"5.6.7.8", response.data)
 
     def test_list_entries(self):
         self.assertEqual(parse_entry("socks5://1.2.3.4:1080"), (4, 16909060, 16909060))

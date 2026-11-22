@@ -1,4 +1,5 @@
 """Downloads the public lists and rebuilds the network feed. Run daily, keeps the old file when a source fails."""
+import json
 import os
 import pathlib
 import shutil
@@ -40,6 +41,30 @@ def lists(target):
         print(f"{name}: {text.count(chr(10).encode())} lines")
 
 
+def operators(target):
+    """Relay addresses the operators publish themselves, so VPN servers outside the public lists are known too."""
+    found = set()
+    try:
+        data = json.loads(urllib.request.urlopen(urllib.request.Request(
+            "https://api.mullvad.net/public/relays/wireguard/v2", headers=UA), timeout=60).read())
+        for relay in data["wireguard"]["relays"]:
+            found.update(a for a in (relay.get("ipv4_addr_in"), relay.get("ipv6_addr_in")) if a)
+    except (OSError, ValueError, KeyError) as error:
+        print("operators: mullvad failed:", error)
+    try:
+        data = json.loads(urllib.request.urlopen(urllib.request.Request(
+            "https://api.ivpn.net/v5/servers.json", headers=UA), timeout=60).read())
+        for group in data["wireguard"]:
+            found.update(host["host"] for host in group["hosts"] if host.get("host"))
+    except (OSError, ValueError, KeyError) as error:
+        print("operators: ivpn failed:", error)
+    if len(found) < 300:
+        print("operators: too short, keeping the old file")
+        return
+    replace(target / "operators.txt", ("\n".join(sorted(found)) + "\n").encode())
+    print("operators:", len(found), "addresses")
+
+
 def feed(target, work):
     environment = dict(os.environ, FEED_WORK=str(work))
     here = pathlib.Path(__file__).resolve().parent
@@ -58,4 +83,5 @@ if __name__ == "__main__":
     datasets = data / "datasets"
     datasets.mkdir(parents=True, exist_ok=True)
     lists(datasets)
+    operators(datasets)
     feed(datasets, data / "feedwork")

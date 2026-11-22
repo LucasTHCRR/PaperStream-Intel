@@ -34,7 +34,7 @@ open to everyone.</p>
 
 {"ip":"203.0.113.9","country":"DE","asn":3320,"network":"end_user",
  "vpn":false,"proxy":false,"tor":false,"hosting":false,"seen_by":0,"community":false}</pre>
-<p><code>network</code> is <code>end_user</code>, <code>hosting</code>, <code>no_users</code> (nobody measured there, treated as hosting) or <code>unknown</code>. <code>vpn</code>, <code>proxy</code> and
+<p><code>network</code> is <code>end_user</code>, <code>hosting</code>, <code>no_users</code> (nobody measured there, reported but not called hosting) or <code>unknown</code>. <code>vpn</code>, <code>proxy</code> and
 <code>tor</code> come from public lists, <code>hosting</code> from the network feed and a datacenter list. <code>seen_by</code> counts the
 ProxyShield servers that reported the address in the last 14 days, <code>community</code> is true from 3 servers.</p>
 <p>Limit: 600 requests a minute per address, answered with 429 and <code>Retry-After</code>. The network feed for offline use is
@@ -173,6 +173,13 @@ def create_app(data_dir=None, datasets_dir=None):
         if not path.exists():
             return jsonify(error="feed not built yet"), 404
         return send_file(path, mimetype="application/gzip", conditional=True, max_age=3600)
+
+    @app.get("/feed/operators.txt")
+    def operators():
+        path = sets_dir / "operators.txt"
+        if not path.exists():
+            return jsonify(error="not built yet"), 404
+        return send_file(path, mimetype="text/plain", conditional=True, max_age=3600)
 
     def install_id(body):
         value = body.get("install") if isinstance(body, dict) else None

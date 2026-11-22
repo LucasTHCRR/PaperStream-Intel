@@ -62,13 +62,14 @@ def parse_entry(line):
     return address.version, int(address), int(address)
 
 
-def read_list(path):
+def read_list(*paths):
     ranges = RangeSet()
-    if path.exists():
-        for line in path.read_text(errors="replace").splitlines():
-            entry = parse_entry(line)
-            if entry:
-                ranges.add(*entry)
+    for path in paths:
+        if path.exists():
+            for line in path.read_text(errors="replace").splitlines():
+                entry = parse_entry(line)
+                if entry:
+                    ranges.add(*entry)
     return ranges.seal()
 
 
@@ -114,6 +115,8 @@ class Datasets:
         self.directory = pathlib.Path(directory)
         self.feed = Feed(self.directory / "asn-feed.tsv.gz")
         self.lists = {name: read_list(self.directory / f"{name}.txt") for name in LISTS}
+        # Server lists the VPN operators publish themselves join the VPN list
+        self.lists["vpn"] = read_list(self.directory / "vpn.txt", self.directory / "operators.txt")
 
     def lookup(self, address):
         found = self.feed.find(address)
@@ -126,7 +129,7 @@ class Datasets:
             "vpn": self.lists["vpn"].contains(address),
             "proxy": self.lists["proxy"].contains(address),
             "tor": self.lists["tor"].contains(address),
-            "hosting": kind in ("H", "N") or self.lists["datacenter"].contains(address),
+            "hosting": kind == "H" or self.lists["datacenter"].contains(address),
         }
 
     def summary(self):
