@@ -61,6 +61,8 @@ def create_app(data_dir=None, datasets_dir=None):
     db.execute("CREATE TABLE IF NOT EXISTS sightings (ip TEXT NOT NULL, install TEXT NOT NULL, day INTEGER NOT NULL,"
                " PRIMARY KEY (ip, install))")
     db.execute("CREATE INDEX IF NOT EXISTS sightings_day ON sightings (day)")
+    db.execute("CREATE TABLE IF NOT EXISTS daily (day INTEGER NOT NULL, kind TEXT NOT NULL, n INTEGER NOT NULL,"
+               " PRIMARY KEY (day, kind))")
     db.commit()
 
     def stamp():
@@ -112,6 +114,40 @@ def create_app(data_dir=None, datasets_dir=None):
                              (ip, today() - RETENTION_DAYS)).fetchone()
         return row[0]
 
+    counts = {"requests": 0, "flagged": 0, "flushed": time.time()}
+
+    def count(flagged):
+        with lock:
+            counts["requests"] += 1
+            counts["flagged"] += 1 if flagged else 0
+            if time.time() - counts["flushed"] < 60:
+                return
+            day = today()
+            for kind in ("requests", "flagged"):
+                if counts[kind]:
+                    db.execute("INSERT INTO daily (day, kind, n) VALUES (?, ?, ?) ON CONFLICT (day, kind) DO UPDATE SET n = n + ?",
+                               (day, kind, counts[kind], counts[kind]))
+                    counts[kind] = 0
+            db.commit()
+            counts["flushed"] = time.time()
+
+    def totals():
+        with lock:
+            rows = db.execute("SELECT kind, SUM(n), MIN(day) FROM daily GROUP BY kind").fetchall()
+            pending = dict(counts)
+        found = {kind: (total, first) for kind, total, first in rows}
+        first_day = min((first for _, first in found.values()), default=today())
+        return {"requests": found.get("requests", (0, 0))[0] + pending["requests"],
+                "flagged": found.get("flagged", (0, 0))[0] + pending["flagged"],
+                "since": time.strftime("%Y-%m-%d", time.gmtime(first_day * 86400))}
+
+    def operator_counts():
+        path = sets_dir / "operators.json"
+        try:
+            return {name: len(addresses) for name, addresses in json.loads(path.read_text()).items()}
+        except (OSError, ValueError):
+            return {}
+
     def purge():
         now = time.time()
         if now - state["purged"] > 3600:
@@ -138,7 +174,8 @@ def create_app(data_dir=None, datasets_dir=None):
         with lock:
             count = db.execute("SELECT COUNT(DISTINCT ip) FROM sightings WHERE day >= ?",
                                (today() - RETENTION_DAYS,)).fetchone()[0]
-        return jsonify(dict(datasets().summary(), reported_addresses=count))
+        return jsonify(dict(datasets().summary(), reported_addresses=count, operators=operator_counts(),
+                            answered=totals()))
 
     def answer(text):
         try:
@@ -151,6 +188,7 @@ def create_app(data_dir=None, datasets_dir=None):
         result = datasets().lookup(address)
         seen = sightings(str(address))
         result.update(seen_by=seen, community=seen >= COMMUNITY_SERVERS)
+        count(any(result[key] for key in ("vpn", "proxy", "tor", "hosting")) or result["community"])
         return jsonify(result)
 
     @app.get("/v1/ip/<text>")

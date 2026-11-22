@@ -169,6 +169,16 @@ class IntelTest(unittest.TestCase):
         self.assertEqual(response.status_code, 503)
         self.assertEqual(response.get_json()["stale"], ["vpn.txt"])
 
+    def test_stats_count_answers_without_addresses(self):
+        self.ip("9.9.9.9")
+        self.ip("45.133.193.73")
+        body = self.client.get("/v1/stats").get_json()
+        self.assertEqual((body["answered"]["requests"], body["answered"]["flagged"]), (2, 1))
+        self.assertIn("vpn_ranges", body)
+        database = sqlite3.connect(os.path.join(self.directory.name, "intel.db"))
+        self.assertEqual(database.execute("SELECT COUNT(*) FROM daily WHERE kind NOT IN ('requests','flagged')").fetchone()[0], 0)
+        database.close()
+
     def test_list_entries(self):
         self.assertEqual(parse_entry("socks5://1.2.3.4:1080"), (4, 16909060, 16909060))
         self.assertEqual(parse_entry("1.2.3.0/24")[2] - parse_entry("1.2.3.0/24")[1], 255)
