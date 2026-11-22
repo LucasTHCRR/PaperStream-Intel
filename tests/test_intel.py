@@ -179,6 +179,23 @@ class IntelTest(unittest.TestCase):
         self.assertEqual(database.execute("SELECT COUNT(*) FROM daily WHERE kind NOT IN ('requests','flagged')").fetchone()[0], 0)
         database.close()
 
+    def test_stats_can_be_filtered_by_days(self):
+        self.ip("9.9.9.9")
+        database = sqlite3.connect(os.path.join(self.directory.name, "intel.db"))
+        day = int(__import__("time").time() // 86400)
+        database.executemany("INSERT INTO daily VALUES (?, ?, ?)", [
+            (day - 3, "requests", 10), (day - 3, "flagged", 4), (day - 40, "requests", 100), (day - 40, "flagged", 50)])
+        database.commit()
+        database.close()
+        week = self.client.get("/v1/stats?days=7").get_json()["answered"]
+        self.assertEqual((week["requests"], week["flagged"], week["days"]), (11, 4, 7))
+        every = self.client.get("/v1/stats").get_json()["answered"]
+        self.assertEqual((every["requests"], every["flagged"]), (111, 54))
+        rows = self.client.get("/v1/stats/daily?days=5").get_json()
+        self.assertEqual(len(rows), 5)
+        self.assertEqual(rows[-4]["requests"], 10)
+        self.assertEqual(rows[-1]["requests"], 1)
+
     def test_list_entries(self):
         self.assertEqual(parse_entry("socks5://1.2.3.4:1080"), (4, 16909060, 16909060))
         self.assertEqual(parse_entry("1.2.3.0/24")[2] - parse_entry("1.2.3.0/24")[1], 255)

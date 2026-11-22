@@ -39,6 +39,8 @@ open to everyone.</p>
 <p><code>network</code> is <code>end_user</code>, <code>hosting</code>, <code>no_users</code> (nobody measured there, reported but not called hosting) or <code>unknown</code>. <code>vpn</code>, <code>proxy</code> and
 <code>tor</code> come from public lists, <code>hosting</code> from the network feed and a datacenter list. <code>seen_by</code> counts the
 ProxyShield servers that reported the address in the last 14 days, <code>community</code> is true from 3 servers.</p>
+<p><code>/v1/stats?days=7</code> gives the totals of answered lookups for the last 7 days (without <code>days</code> for all time) together with the size of every dataset,
+<code>/v1/stats/daily?days=30</code> the answered lookups per day.</p>
 <p>Limit: 600 requests a minute per address, answered with 429 and <code>Retry-After</code>. The network feed for offline use is
 <a href="/feed/asn-feed.tsv.gz">/feed/asn-feed.tsv.gz</a> (iptoasn.com, public domain, and APNIC aspop).</p>
 <p>Reporting is off by default and has to be switched on by the server owner. Details in the
@@ -131,15 +133,40 @@ def create_app(data_dir=None, datasets_dir=None):
             db.commit()
             counts["flushed"] = time.time()
 
-    def totals():
+    def totals(days=None):
+        """Sums over the last `days` days (today included), or over everything."""
+        first = today() - days + 1 if days else 0
         with lock:
-            rows = db.execute("SELECT kind, SUM(n), MIN(day) FROM daily GROUP BY kind").fetchall()
+            rows = db.execute("SELECT kind, SUM(n), MIN(day) FROM daily WHERE day >= ? GROUP BY kind", (first,)).fetchall()
             pending = dict(counts)
-        found = {kind: (total, first) for kind, total, first in rows}
-        first_day = min((first for _, first in found.values()), default=today())
-        return {"requests": found.get("requests", (0, 0))[0] + pending["requests"],
-                "flagged": found.get("flagged", (0, 0))[0] + pending["flagged"],
-                "since": time.strftime("%Y-%m-%d", time.gmtime(first_day * 86400))}
+        found = {kind: (total, start) for kind, total, start in rows}
+        start_day = min((start for _, start in found.values()), default=today())
+        result = {"requests": found.get("requests", (0, 0))[0] + pending["requests"],
+                  "flagged": found.get("flagged", (0, 0))[0] + pending["flagged"],
+                  "since": time.strftime("%Y-%m-%d", time.gmtime(start_day * 86400))}
+        if days:
+            result["days"] = days
+        return result
+
+    def series(days):
+        first = today() - days + 1
+        with lock:
+            rows = db.execute("SELECT day, kind, n FROM daily WHERE day >= ?", (first,)).fetchall()
+            pending = dict(counts)
+        table = {first + offset: {"requests": 0, "flagged": 0} for offset in range(days)}
+        for day, kind, n in rows:
+            if day in table:
+                table[day][kind] = n
+        for kind in ("requests", "flagged"):
+            table[today()][kind] += pending[kind]
+        return [{"date": time.strftime("%Y-%m-%d", time.gmtime(day * 86400)), **values} for day, values in sorted(table.items())]
+
+    def days_argument(default=None):
+        try:
+            value = int(request.args.get("days", ""))
+        except ValueError:
+            return default
+        return max(1, min(value, 3650))
 
     def operator_counts():
         path = sets_dir / "operators.json"
@@ -175,7 +202,12 @@ def create_app(data_dir=None, datasets_dir=None):
             count = db.execute("SELECT COUNT(DISTINCT ip) FROM sightings WHERE day >= ?",
                                (today() - RETENTION_DAYS,)).fetchone()[0]
         return jsonify(dict(datasets().summary(), reported_addresses=count, operators=operator_counts(),
-                            answered=totals()))
+                            answered=totals(days_argument())))
+
+    @app.get("/v1/stats/daily")
+    def stats_daily():
+        """Answered lookups per day for the last `days` days (default 30), for filters and charts."""
+        return jsonify(series(days_argument(30)))
 
     def answer(text):
         try:
