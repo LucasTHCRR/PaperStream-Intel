@@ -15,7 +15,7 @@ GET  /v1/stats?days=7         answered lookups of the last 7 days (no days = all
 GET  /v1/stats/daily?days=30  answered lookups per day
 GET  /feed/asn-feed.tsv.gz    network feed for offline use
 GET  /feed/operators.txt      relay addresses the VPN operators publish, one per line
-GET  /healthz                 200 while every dataset is fresh, 503 with the stale files otherwise
+GET  /healthz                 200 while every dataset is fresh, 503 with the stale files otherwise; also lookups per minute and memory
 POST /v1/report               {"install": "<32-64 hex>", "ips": [...up to 200]}   (ProxyShield, opt-in)
 POST /v1/forget               {"install": "<id>"}   deletes everything that install sent
 ```

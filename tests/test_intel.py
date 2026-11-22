@@ -196,6 +196,13 @@ class IntelTest(unittest.TestCase):
         self.assertEqual(rows[-4]["requests"], 10)
         self.assertEqual(rows[-1]["requests"], 1)
 
+    def test_healthz_reports_load(self):
+        self.ip("9.9.9.9")
+        load = self.client.get("/healthz").get_json()["load"]
+        self.assertIn("requests_last_minute", load)
+        self.assertIn("requests_last_5_minutes", load)
+        self.assertGreaterEqual(load.get("service_memory_mb", 1), 0)
+
     def test_list_entries(self):
         self.assertEqual(parse_entry("socks5://1.2.3.4:1080"), (4, 16909060, 16909060))
         self.assertEqual(parse_entry("1.2.3.0/24")[2] - parse_entry("1.2.3.0/24")[1], 255)

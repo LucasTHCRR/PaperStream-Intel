@@ -96,9 +96,14 @@ def create_app(data_dir=None, datasets_dir=None):
         return row[0]
 
     counts = {"requests": 0, "flagged": 0, "flushed": time.time()}
+    minutes = {}
 
     def count(flagged):
         with lock:
+            minute = int(time.time() // 60)
+            minutes[minute] = minutes.get(minute, 0) + 1
+            for old in [m for m in minutes if m < minute - 10]:
+                del minutes[old]
             counts["requests"] += 1
             counts["flagged"] += 1 if flagged else 0
             if time.time() - counts["flushed"] < 60:
@@ -218,6 +223,26 @@ def create_app(data_dir=None, datasets_dir=None):
             address = request.headers.get("X-Real-IP") or address
         return answer(address)
 
+    def load():
+        """Numbers for the operator: lookups per minute, memory of the service and of the machine."""
+        minute = int(time.time() // 60)
+        with lock:
+            last = minutes.get(minute - 1, 0)
+            five = sum(minutes.get(minute - offset, 0) for offset in range(1, 6))
+        info = {"requests_last_minute": last, "requests_last_5_minutes": five}
+        try:
+            for line in open("/proc/self/status"):
+                if line.startswith("VmRSS:"):
+                    info["service_memory_mb"] = int(line.split()[1]) // 1024
+            for line in open("/proc/meminfo"):
+                if line.startswith("MemAvailable:"):
+                    info["memory_available_mb"] = int(line.split()[1]) // 1024
+            info["load_1m"] = round(os.getloadavg()[0], 2)
+            info["cpus"] = os.cpu_count() or 1
+        except (OSError, ValueError):
+            pass
+        return info
+
     @app.get("/healthz")
     def healthz():
         ages = {}
@@ -226,7 +251,7 @@ def create_app(data_dir=None, datasets_dir=None):
             ages[name] = round((time.time() - path.stat().st_mtime) / 3600, 1) if path.exists() else None
         stale = [name for name, age in ages.items() if age is None or age > STALE_HOURS]
         status = 503 if stale else 200
-        return jsonify(ok=not stale, stale=stale, age_hours=ages), status
+        return jsonify(ok=not stale, stale=stale, age_hours=ages, load=load()), status
 
     @app.get("/feed/asn-feed.tsv.gz")
     def feed():
