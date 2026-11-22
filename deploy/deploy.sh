@@ -2,9 +2,12 @@
 # Spielt den Intel-Dienst auf den Root-Server und legt DNS-Eintrag, Zertifikat und den naechtlichen Abruf an.
 # Mehrfach ausfuehrbar.
 set -euo pipefail
-HOST=root@45.133.74.209
-KEY=~/.ssh/id_ed25519_45-133-74-209
-DOMAIN=intel.paperstream.dev
+# Server, Schluessel, Domain und IP kommen aus deploy/local.env (nicht im Repo), siehe deploy/local.env.example
+. "$(dirname "$0")/local.env"
+HOST=${DEPLOY_HOST:?set DEPLOY_HOST in deploy/local.env}
+KEY=${DEPLOY_KEY:?set DEPLOY_KEY in deploy/local.env}
+DOMAIN=${DEPLOY_DOMAIN:?set DEPLOY_DOMAIN in deploy/local.env}
+SERVER_IP=${DEPLOY_IP:?set DEPLOY_IP in deploy/local.env}
 SRC="$(cd "$(dirname "$0")/.." && pwd)"
 SSH="ssh -i $KEY $HOST"
 
@@ -27,7 +30,7 @@ have = api('GET', f'/zones/{zone}/dns_records?name={name}&type=A')['result']
 if have:
     print('dns: A record exists, proxied =', have[0]['proxied'])
 else:
-    r = api('POST', f'/zones/{zone}/dns_records', {'type': 'A', 'name': name, 'content': '45.133.74.209', 'proxied': False, 'ttl': 300})
+    r = api('POST', f'/zones/{zone}/dns_records', {'type': 'A', 'name': name, 'content': '$SERVER_IP', 'proxied': False, 'ttl': 300})
     print('dns: created', r['success'])
 PY"
 

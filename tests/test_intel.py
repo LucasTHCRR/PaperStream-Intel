@@ -68,7 +68,7 @@ class IntelTest(unittest.TestCase):
         self.assertTrue(self.ip("2a07:d883:703:3::f001")[1]["vpn"])
 
     def test_networks_without_users_are_reported_but_not_called_hosting(self):
-        code, body = self.ip("45.133.74.209")
+        code, body = self.ip("45.133.74.77")
         self.assertEqual((body["network"], body["country"], body["asn"], body["hosting"]), ("no_users", "DE", 58087, False))
         body = self.ip("84.22.1.1")[1]
         self.assertEqual((body["network"], body["country"], body["asn"], body["hosting"]), ("unknown", "NL", 9009, False))

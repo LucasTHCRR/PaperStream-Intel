@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Address data of the intel service: the network feed and the VPN, datacenter, Tor and proxy lists."""
 import bisect
 import gzip

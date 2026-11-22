@@ -18,3 +18,7 @@ nightly. Reports are kept 14 days under a hash of the install id.
 Run locally: `INTEL_DATA=./data python3 refresh.py`, then
 `INTEL_DATA=./data python3 -c "from app import create_app; create_app().run(port=5191)"`.
 Tests: `python3 -m unittest discover -s tests`. Deploy: `deploy/deploy.sh` (root server, DNS, TLS, nginx, systemd).
+
+## License
+
+AGPL-3.0-or-later, see LICENSE. If you run a changed copy as a service, the changed source has to be offered to its users.

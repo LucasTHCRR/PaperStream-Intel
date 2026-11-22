@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """PaperStream intel service: free address lookups for anti-VPN plugins, the network feed, and an opt-in
 sightings counter fed by ProxyShield servers that chose to report."""
 import hashlib

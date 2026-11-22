@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Downloads the public lists and rebuilds the network feed. Run daily, keeps the old file when a source fails."""
 import json
 import os
