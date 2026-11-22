@@ -161,6 +161,14 @@ class IntelTest(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"5.6.7.8", response.data)
 
+    def test_healthz_reports_stale_data(self):
+        self.assertEqual(self.client.get("/healthz").status_code, 200)
+        old = os.path.join(self.directory.name, "datasets", "vpn.txt")
+        os.utime(old, (1, 1))
+        response = self.client.get("/healthz")
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.get_json()["stale"], ["vpn.txt"])
+
     def test_list_entries(self):
         self.assertEqual(parse_entry("socks5://1.2.3.4:1080"), (4, 16909060, 16909060))
         self.assertEqual(parse_entry("1.2.3.0/24")[2] - parse_entry("1.2.3.0/24")[1], 255)

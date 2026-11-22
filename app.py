@@ -16,6 +16,7 @@ from flask import Flask, Response, jsonify, request, send_file
 from datasets import Datasets
 
 LOOKUPS_PER_MINUTE = 600
+STALE_HOURS = 48
 REPORTS_PER_MINUTE = 30
 REPORT_BATCH = 200
 REPORTS_PER_DAY = 2000
@@ -166,6 +167,16 @@ def create_app(data_dir=None, datasets_dir=None):
         if address == "127.0.0.1":
             address = request.headers.get("X-Real-IP") or address
         return answer(address)
+
+    @app.get("/healthz")
+    def healthz():
+        ages = {}
+        for name in ("asn-feed.tsv.gz", "vpn.txt", "operators.txt"):
+            path = sets_dir / name
+            ages[name] = round((time.time() - path.stat().st_mtime) / 3600, 1) if path.exists() else None
+        stale = [name for name, age in ages.items() if age is None or age > STALE_HOURS]
+        status = 503 if stale else 200
+        return jsonify(ok=not stale, stale=stale, age_hours=ages), status
 
     @app.get("/feed/asn-feed.tsv.gz")
     def feed():

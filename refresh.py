@@ -4,7 +4,9 @@ import os
 import pathlib
 import shutil
 import subprocess
+import sqlite3
 import sys
+import time
 import urllib.request
 
 SOURCES = {
@@ -41,28 +43,67 @@ def lists(target):
         print(f"{name}: {text.count(chr(10).encode())} lines")
 
 
-def operators(target):
-    """Relay addresses the operators publish themselves, so VPN servers outside the public lists are known too."""
+def fetch_json(url, first_line=False):
+    raw = urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=90).read().decode("utf-8", "replace")
+    return json.loads(raw.split("\n", 1)[0] if first_line else raw)
+
+
+def mullvad(data):
     found = set()
-    try:
-        data = json.loads(urllib.request.urlopen(urllib.request.Request(
-            "https://api.mullvad.net/public/relays/wireguard/v2", headers=UA), timeout=60).read())
-        for relay in data["wireguard"]["relays"]:
-            found.update(a for a in (relay.get("ipv4_addr_in"), relay.get("ipv6_addr_in")) if a)
-    except (OSError, ValueError, KeyError) as error:
-        print("operators: mullvad failed:", error)
-    try:
-        data = json.loads(urllib.request.urlopen(urllib.request.Request(
-            "https://api.ivpn.net/v5/servers.json", headers=UA), timeout=60).read())
-        for group in data["wireguard"]:
-            found.update(host["host"] for host in group["hosts"] if host.get("host"))
-    except (OSError, ValueError, KeyError) as error:
-        print("operators: ivpn failed:", error)
+    for relay in data["wireguard"]["relays"]:
+        found.update(a for a in (relay.get("ipv4_addr_in"), relay.get("ipv6_addr_in")) if a)
+    return found
+
+
+def ivpn(data):
+    return {host["host"] for group in data["wireguard"] for host in group["hosts"] if host.get("host")}
+
+
+def nord(data):
+    return {server[key] for server in data for key in ("station", "ipv6_station") if server.get(key)}
+
+
+def pia(data):
+    return {server["ip"] for region in data["regions"] for servers in region["servers"].values()
+            for server in servers if server.get("ip")}
+
+
+OPERATORS = [
+    ("mullvad", "https://api.mullvad.net/public/relays/wireguard/v2", mullvad, False),
+    ("ivpn", "https://api.ivpn.net/v5/servers.json", ivpn, False),
+    ("nord", "https://api.nordvpn.com/v1/servers?limit=10000", nord, False),
+    ("pia", "https://serverlist.piaservers.net/vpninfo/servers/v6", pia, True),
+]
+
+
+def operators(target):
+    """Relay addresses the operators publish themselves, so VPN servers outside the public lists are known too.
+    An operator that fails keeps its addresses from the last run, so one outage does not shrink the list."""
+    known = {}
+    previous = target / "operators.json"
+    if previous.exists():
+        try:
+            known = json.loads(previous.read_text())
+        except ValueError:
+            known = {}
+    for name, url, parse, first_line in OPERATORS:
+        try:
+            addresses = parse(fetch_json(url, first_line))
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            print(f"operators: {name} failed: {error}")
+            continue
+        if len(addresses) < 50:
+            print(f"operators: {name} too short ({len(addresses)}), keeping the old list")
+            continue
+        known[name] = sorted(addresses)
+        print(f"operators: {name} {len(addresses)} addresses")
+    found = {address for addresses in known.values() for address in addresses}
     if len(found) < 300:
         print("operators: too short, keeping the old file")
         return
+    replace(previous, json.dumps(known).encode())
     replace(target / "operators.txt", ("\n".join(sorted(found)) + "\n").encode())
-    print("operators:", len(found), "addresses")
+    print("operators:", len(found), "addresses in total")
 
 
 def feed(target, work):
@@ -78,6 +119,25 @@ def feed(target, work):
     print("feed: ok", built.stat().st_size, "bytes")
 
 
+def backup(data):
+    """A consistent copy of the sightings database every night, the last seven are kept."""
+    source = data / "intel.db"
+    if not source.exists():
+        return
+    folder = data / "backup"
+    folder.mkdir(exist_ok=True)
+    target = folder / f"intel-{time.strftime('%Y%m%d')}.db"
+    original, copy = sqlite3.connect(source), sqlite3.connect(target)
+    try:
+        original.backup(copy)
+    finally:
+        copy.close()
+        original.close()
+    for old in sorted(folder.glob("intel-*.db"))[:-7]:
+        old.unlink()
+    print("backup:", target.name)
+
+
 if __name__ == "__main__":
     data = pathlib.Path(os.environ.get("INTEL_DATA", "data"))
     datasets = data / "datasets"
@@ -85,3 +145,4 @@ if __name__ == "__main__":
     lists(datasets)
     operators(datasets)
     feed(datasets, data / "feedwork")
+    backup(data)

@@ -12,7 +12,7 @@ GET  /v1/stats
 ```
 
 Data: iptoasn.com (public domain) and APNIC aspop for the feed, X4BNet/lists_vpn (MIT), the Tor
-bulk exit list and monosans/proxy-list (MIT) for the lists, plus the relay lists Mullvad and IVPN publish themselves. `refresh.py` rebuilds all of it
+bulk exit list and monosans/proxy-list (MIT) for the lists, plus the relay lists Mullvad, IVPN, NordVPN and PIA publish themselves. `refresh.py` rebuilds all of it
 nightly. Reports are kept 14 days under a hash of the install id.
 
 Run locally: `INTEL_DATA=./data python3 refresh.py`, then
