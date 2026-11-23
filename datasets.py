@@ -120,7 +120,9 @@ class Datasets:
         self.lists["datacenter"] = read_list(self.directory / "datacenter.txt", self.directory / "clouds.txt")
         # Server lists the VPN operators publish themselves join the VPN list
         # Hand-picked lists shipped with the code (curated/*.txt), for example reported relay addresses
-        curated = sorted((pathlib.Path(__file__).parent / "curated").glob("*.txt"))
+        # private/*.txt: lists that must not be published, they are only copied to the server
+        here = pathlib.Path(__file__).parent
+        curated = sorted((here / "curated").glob("*.txt")) + sorted((here / "private").glob("*.txt"))
         self.lists["vpn"] = read_list(self.directory / "vpn.txt", self.directory / "operators.txt", *curated)
 
     def lookup(self, address):
