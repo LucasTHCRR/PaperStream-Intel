@@ -55,6 +55,8 @@ INTEL_DATA=./data python3 -c "from app import create_app; create_app().run(port=
 
 Tests: `python3 -m unittest discover -s tests`
 
+Add address lists with a small window: `python3 tools/list_manager.py` (loads files or pasted text, keeps only what the service does not flag yet, writes `curated/<name>.txt`, can deploy and push).
+
 Deploy to your own server: copy `deploy/local.env.example` to `deploy/local.env`, fill it in and run
 `deploy/deploy.sh` (user, DNS record, TLS certificate, nginx, systemd units and the nightly timer).
 
