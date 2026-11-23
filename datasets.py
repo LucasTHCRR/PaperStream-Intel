@@ -117,7 +117,9 @@ class Datasets:
         self.feed = Feed(self.directory / "asn-feed.tsv.gz")
         self.lists = {name: read_list(self.directory / f"{name}.txt") for name in LISTS}
         # Server lists the VPN operators publish themselves join the VPN list
-        self.lists["vpn"] = read_list(self.directory / "vpn.txt", self.directory / "operators.txt")
+        # Hand-picked lists shipped with the code (curated/*.txt), for example reported relay addresses
+        curated = sorted((pathlib.Path(__file__).parent / "curated").glob("*.txt"))
+        self.lists["vpn"] = read_list(self.directory / "vpn.txt", self.directory / "operators.txt", *curated)
 
     def lookup(self, address):
         found = self.feed.find(address)

@@ -55,6 +55,11 @@ class IntelTest(unittest.TestCase):
         self.assertEqual((body["network"], body["country"], body["asn"]), ("end_user", "DE", 3320))
         self.assertFalse(any(body[k] for k in ("vpn", "proxy", "tor", "hosting")))
 
+    def test_curated_list_counts_as_vpn(self):
+        code, body = self.ip("5.172.194.122")
+        self.assertEqual(code, 200)
+        self.assertTrue(body["vpn"])
+
     def test_hosting_network_and_lists(self):
         self.assertTrue(self.ip("51.75.1.1")[1]["hosting"])
         self.assertTrue(self.ip("34.120.0.5")[1]["hosting"])

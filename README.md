@@ -30,6 +30,7 @@ keeps a salted hash of the address in memory only.
 - VPN and datacenter lists: X4BNet/lists_vpn (MIT). Tor: the Tor bulk exit list. Open proxies:
   monosans/proxy-list (MIT).
 - Relay lists that Mullvad, IVPN, NordVPN and Private Internet Access publish themselves.
+- `curated/hola.txt`: 673 HolaVPN addresses, shared by [ImZowi](https://github.com/ImZowi). Thank you!
 - Sightings reported by ProxyShield servers: kept 14 days under a hash of the install id, an address
   counts as `community` from 3 different servers.
 
