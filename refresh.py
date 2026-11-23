@@ -11,6 +11,8 @@ import sys
 import time
 import urllib.request
 
+from datasets import parse_entry
+
 SOURCES = {
     "vpn": ["https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/vpn/ipv4.txt",
             "https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/vpn/ipv6.txt"],
@@ -179,6 +181,45 @@ def operators(target):
     print("operators:", len(found), "addresses in total")
 
 
+JOE = "https://raw.githubusercontent.com/Joe12387/open-source-vpn-ip-lists/master/{}.txt"
+# Public lists of VPN servers: name, url. Joe12387 is CC0, tn3w Apache-2.0, az0 GPL-3.0.
+COMMUNITY = [(f"joe12387-{service}", JOE.format(service)) for service in
+             ("airvpn", "ivpn", "mullvad", "nordvpn", "ovpn", "pia", "protonvpn", "riseupvpn", "surfshark", "windscribe")] + [
+    ("tn3w-protonvpn", "https://raw.githubusercontent.com/tn3w/ProtonVPN-IPs/master/protonvpn_ips.txt"),
+    ("az0-vpn-ip", "http://az0-vpnip-public.oooninja.com/ip.txt"),
+]
+
+
+def community(target):
+    """VPN server lists that other projects publish. A source that fails keeps its addresses from the last run."""
+    known = {}
+    previous = target / "community.json"
+    if previous.exists():
+        try:
+            known = json.loads(previous.read_text())
+        except ValueError:
+            known = {}
+    for name, url in COMMUNITY:
+        try:
+            text = urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=90).read().decode("utf-8", "replace")
+        except OSError as error:
+            print(f"community: {name} failed: {error}")
+            continue
+        lines = {line.strip() for line in text.splitlines() if parse_entry(line)}
+        if len(lines) < 10:
+            print(f"community: {name} too short ({len(lines)}), keeping the old list")
+            continue
+        known[name] = sorted(lines)
+        print(f"community: {name} {len(lines)} entries")
+    found = {entry for lines in known.values() for entry in lines}
+    if len(found) < 1000:
+        print("community: too short, keeping the old file")
+        return
+    replace(previous, json.dumps(known).encode())
+    replace(target / "community.txt", ("\n".join(sorted(found)) + "\n").encode())
+    print("community:", len(found), "entries in total")
+
+
 def feed(target, work):
     environment = dict(os.environ, FEED_WORK=str(work))
     here = pathlib.Path(__file__).resolve().parent
@@ -218,5 +259,8 @@ if __name__ == "__main__":
     lists(datasets)
     operators(datasets)
     clouds(datasets)
-    feed(datasets, data / "feedwork")
-    backup(data)
+    community(datasets)
+    # "quick" skips the heavy part (feed and backup), it runs every four hours
+    if "quick" not in sys.argv[1:]:
+        feed(datasets, data / "feedwork")
+        backup(data)

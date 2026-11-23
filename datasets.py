@@ -123,7 +123,8 @@ class Datasets:
         # private/*.txt: lists that must not be published, they are only copied to the server
         here = pathlib.Path(__file__).parent
         curated = sorted((here / "curated").glob("*.txt")) + sorted((here / "private").glob("*.txt"))
-        self.lists["vpn"] = read_list(self.directory / "vpn.txt", self.directory / "operators.txt", *curated)
+        self.lists["vpn"] = read_list(self.directory / "vpn.txt", self.directory / "operators.txt",
+                                      self.directory / "community.txt", *curated)
 
     def lookup(self, address):
         found = self.feed.find(address)
