@@ -31,6 +31,8 @@ keeps a salted hash of the address in memory only.
   monosans/proxy-list (MIT).
 - Relay lists that Mullvad, IVPN, NordVPN and Private Internet Access publish themselves.
 - `curated/hola.txt`: 673 HolaVPN addresses, shared by [ImZowi](https://github.com/ImZowi). Thank you!
+- `curated/proton.txt`: 926 Proton VPN server addresses from the server list of the official Proton VPN app.
+- Cloud ranges that AWS, Google Cloud, Oracle and DigitalOcean publish count as datacenter space, and the Surfshark servers are resolved from its public server list.
 - Sightings reported by ProxyShield servers: kept 14 days under a hash of the install id, an address
   counts as `community` from 3 different servers.
 
