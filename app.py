@@ -249,6 +249,27 @@ def create_app(data_dir=None, datasets_dir=None):
             pass
         return info
 
+    # Zeitweise Diagnose (INTEL_DIAG=1): nur Zaehler pro Endpunkt und Programmname, keine Adressen, keine Zeiten
+    if os.environ.get("INTEL_DIAG") == "1":
+        diag = {}
+
+        @app.after_request
+        def count_clients(response):
+            path = request.path
+            kind = "ip" if path.startswith("/v1/ip/") else path if path in ("/v1/me", "/healthz", "/v1/stats", "/v1/stats/daily", "/v1/report") else "other"
+            family = (request.headers.get("User-Agent") or "none").split("/")[0].split(" ")[0][:30]
+            with lock:
+                diag[(kind, family)] = diag.get((kind, family), 0) + 1
+            return response
+
+        @app.get("/internal/diag")
+        def show_diag():
+            if request.headers.get("X-Real-IP") or request.headers.get("CF-Connecting-IP") or request.remote_addr != "127.0.0.1":
+                return jsonify(error="not found"), 404
+            with lock:
+                rows = sorted(diag.items(), key=lambda item: -item[1])
+            return jsonify([{"endpoint": k[0], "client": k[1], "count": n} for k, n in rows])
+
     @app.get("/healthz")
     def healthz():
         ages = {}
