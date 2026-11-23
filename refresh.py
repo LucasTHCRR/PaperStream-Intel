@@ -4,6 +4,7 @@ import json
 import os
 import pathlib
 import shutil
+import socket
 import subprocess
 import sqlite3
 import sys
@@ -69,12 +70,83 @@ def pia(data):
             for server in servers if server.get("ip")}
 
 
+def surfshark(data):
+    """Surfshark publishes host names only, so they are resolved here (a part of the load balanced answers is enough)."""
+    found = set()
+    for server in data:
+        try:
+            for info in socket.getaddrinfo(server["connectionName"], None, proto=socket.IPPROTO_TCP):
+                found.add(info[4][0])
+        except (OSError, KeyError):
+            continue
+    return found
+
+
 OPERATORS = [
     ("mullvad", "https://api.mullvad.net/public/relays/wireguard/v2", mullvad, False),
     ("ivpn", "https://api.ivpn.net/v5/servers.json", ivpn, False),
     ("nord", "https://api.nordvpn.com/v1/servers?limit=10000", nord, False),
     ("pia", "https://serverlist.piaservers.net/vpninfo/servers/v6", pia, True),
+    ("surfshark", "https://api.surfshark.com/v4/server/clusters/all", surfshark, False),
 ]
+
+
+def aws(data):
+    return {item["ip_prefix"] for item in data["prefixes"]} | {item["ipv6_prefix"] for item in data["ipv6_prefixes"]}
+
+
+def google_cloud(data):
+    return {item.get("ipv4Prefix") or item.get("ipv6Prefix") for item in data["prefixes"]} - {None}
+
+
+def oracle(data):
+    return {item["cidr"] for region in data["regions"] for item in region["cidrs"]}
+
+
+def digitalocean(text):
+    return {line.split(",", 1)[0] for line in text.splitlines() if line[:1].isdigit() or line[:1] in "0123456789abcdef"}
+
+
+# name, url, parser, is text (not JSON). The providers publish these ranges themselves.
+CLOUDS = [
+    ("aws", "https://ip-ranges.amazonaws.com/ip-ranges.json", aws, False),
+    ("google", "https://www.gstatic.com/ipranges/cloud.json", google_cloud, False),
+    ("oracle", "https://docs.oracle.com/iaas/tools/public_ip_ranges.json", oracle, False),
+    ("digitalocean", "https://digitalocean.com/geo/google.csv", digitalocean, True),
+]
+
+
+def clouds(target):
+    """Ranges of the big cloud providers, so hosting space inside other networks is known too.
+    A provider that fails keeps its ranges from the last run."""
+    known = {}
+    previous = target / "clouds.json"
+    if previous.exists():
+        try:
+            known = json.loads(previous.read_text())
+        except ValueError:
+            known = {}
+    for name, url, parse, is_text in CLOUDS:
+        try:
+            if is_text:
+                ranges = parse(urllib.request.urlopen(urllib.request.Request(url, headers=UA), timeout=90).read().decode("utf-8", "replace"))
+            else:
+                ranges = parse(fetch_json(url))
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            print(f"clouds: {name} failed: {error}")
+            continue
+        if len(ranges) < 100:
+            print(f"clouds: {name} too short ({len(ranges)}), keeping the old list")
+            continue
+        known[name] = sorted(ranges)
+        print(f"clouds: {name} {len(ranges)} ranges")
+    found = {entry for ranges in known.values() for entry in ranges}
+    if len(found) < 1000:
+        print("clouds: too short, keeping the old file")
+        return
+    replace(previous, json.dumps(known).encode())
+    replace(target / "clouds.txt", ("\n".join(sorted(found)) + "\n").encode())
+    print("clouds:", len(found), "ranges in total")
 
 
 def operators(target):
@@ -145,5 +217,6 @@ if __name__ == "__main__":
     datasets.mkdir(parents=True, exist_ok=True)
     lists(datasets)
     operators(datasets)
+    clouds(datasets)
     feed(datasets, data / "feedwork")
     backup(data)

@@ -116,6 +116,8 @@ class Datasets:
         self.directory = pathlib.Path(directory)
         self.feed = Feed(self.directory / "asn-feed.tsv.gz")
         self.lists = {name: read_list(self.directory / f"{name}.txt") for name in LISTS}
+        # Ranges the cloud providers publish count as datacenter space
+        self.lists["datacenter"] = read_list(self.directory / "datacenter.txt", self.directory / "clouds.txt")
         # Server lists the VPN operators publish themselves join the VPN list
         # Hand-picked lists shipped with the code (curated/*.txt), for example reported relay addresses
         curated = sorted((pathlib.Path(__file__).parent / "curated").glob("*.txt"))

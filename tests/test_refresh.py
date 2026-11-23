@@ -24,6 +24,23 @@ class OperatorParsingTest(unittest.TestCase):
         self.assertEqual(refresh.pia(data), {"9.9.9.1", "9.9.9.2"})
 
 
+class CloudParsingTest(unittest.TestCase):
+    def test_aws_takes_both_families(self):
+        data = {"prefixes": [{"ip_prefix": "3.4.12.4/32"}], "ipv6_prefixes": [{"ipv6_prefix": "2600:1f00::/40"}]}
+        self.assertEqual(refresh.aws(data), {"3.4.12.4/32", "2600:1f00::/40"})
+
+    def test_google_takes_either_prefix(self):
+        data = {"prefixes": [{"ipv4Prefix": "34.1.208.0/20"}, {"ipv6Prefix": "2600:1900::/35"}]}
+        self.assertEqual(refresh.google_cloud(data), {"34.1.208.0/20", "2600:1900::/35"})
+
+    def test_oracle(self):
+        self.assertEqual(refresh.oracle({"regions": [{"cidrs": [{"cidr": "40.233.0.0/19"}]}]}), {"40.233.0.0/19"})
+
+    def test_digitalocean_csv(self):
+        text = "5.101.96.0/21,NL,NL-NH,Amsterdam,1098 XH\n<html>\n24.144.64.0/22,US,US-NJ,North Bergen,07047\n"
+        self.assertEqual(refresh.digitalocean(text), {"5.101.96.0/21", "24.144.64.0/22"})
+
+
 class BackupTest(unittest.TestCase):
     def test_backup_keeps_seven(self):
         import pathlib
