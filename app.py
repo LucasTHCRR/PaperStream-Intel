@@ -62,10 +62,16 @@ def create_app(data_dir=None, datasets_dir=None):
                 state["stamp"] = latest
         return state["datasets"]
 
+    def forwarded():
+        # Hinter dem Cloudflare-Tunnel steht die Adresse in CF-Connecting-IP, nur mit INTEL_TRUST_CF=1 beachten
+        if os.environ.get("INTEL_TRUST_CF") == "1" and request.headers.get("CF-Connecting-IP"):
+            return request.headers["CF-Connecting-IP"]
+        return request.headers.get("X-Real-IP")
+
     def client():
         address = request.remote_addr or ""
         if address == "127.0.0.1":
-            address = request.headers.get("X-Real-IP") or address
+            address = forwarded() or address
         return hashlib.sha256(salt + address.encode()).hexdigest()
 
     def limited(kind, limit):
@@ -220,7 +226,7 @@ def create_app(data_dir=None, datasets_dir=None):
             return too_many()
         address = request.remote_addr or ""
         if address == "127.0.0.1":
-            address = request.headers.get("X-Real-IP") or address
+            address = forwarded() or address
         return answer(address)
 
     def load():
