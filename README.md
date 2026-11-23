@@ -54,6 +54,8 @@ INTEL_DATA=./data python3 refresh.py
 INTEL_DATA=./data python3 -c "from app import create_app; create_app().run(port=5191)"
 ```
 
+The network feed is built by `rust/feedbuild` (static binary, `bin/feedbuild` on the server, about 3.5 s and 130 MB instead of 13 s and 375 MB); `feedbuild.py` is the fallback and produces the same file.
+
 Tests: `python3 -m unittest discover -s tests`
 
 Add address lists with a small window: `python3 tools/list_manager.py` (loads files or pasted text, keeps only what the service does not flag yet, writes `curated/<name>.txt`, can deploy and push).

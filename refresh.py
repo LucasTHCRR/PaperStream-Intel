@@ -221,16 +221,25 @@ def community(target):
 
 
 def feed(target, work):
+    """Builds the network feed. The Rust program (bin/feedbuild) is used when it is there, the Python script
+    is the fallback if it is missing or fails."""
     environment = dict(os.environ, FEED_WORK=str(work))
     here = pathlib.Path(__file__).resolve().parent
-    result = subprocess.run([sys.executable, str(here / "feedbuild.py")], env=environment, capture_output=True, text=True)
+    commands = []
+    if (here / "bin" / "feedbuild").exists():
+        commands.append([str(here / "bin" / "feedbuild")])
+    commands.append([sys.executable, str(here / "feedbuild.py")])
     built = work / "out" / "asn-feed.tsv.gz"
-    if result.returncode or not built.exists() or built.stat().st_size < 1_000_000:
-        print("feed: build failed, keeping the old file", result.stderr[-300:])
-        return
-    shutil.copy(built, target / "asn-feed.tsv.gz.tmp")
-    os.replace(target / "asn-feed.tsv.gz.tmp", target / "asn-feed.tsv.gz")
-    print("feed: ok", built.stat().st_size, "bytes")
+    for command in commands:
+        built.unlink(missing_ok=True)
+        result = subprocess.run(command, env=environment, capture_output=True, text=True)
+        if not result.returncode and built.exists() and built.stat().st_size >= 1_000_000:
+            shutil.copy(built, target / "asn-feed.tsv.gz.tmp")
+            os.replace(target / "asn-feed.tsv.gz.tmp", target / "asn-feed.tsv.gz")
+            print("feed: ok", pathlib.Path(command[-1]).name, built.stat().st_size, "bytes")
+            return
+        print("feed: build failed with", pathlib.Path(command[-1]).name, result.stderr[-300:])
+    print("feed: all builds failed, keeping the old file")
 
 
 def backup(data):
