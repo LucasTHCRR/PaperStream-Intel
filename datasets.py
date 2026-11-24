@@ -116,8 +116,9 @@ class Datasets:
         self.directory = pathlib.Path(directory)
         self.feed = Feed(self.directory / "asn-feed.tsv.gz")
         self.lists = {name: read_list(self.directory / f"{name}.txt") for name in LISTS}
-        # Ranges the cloud providers publish count as datacenter space
-        self.lists["datacenter"] = read_list(self.directory / "datacenter.txt", self.directory / "clouds.txt")
+        # Ranges the cloud providers publish and hosting ranges found in the registries' databases count as datacenter space
+        self.lists["datacenter"] = read_list(self.directory / "datacenter.txt", self.directory / "clouds.txt",
+                                             self.directory / "rir-hosting.txt")
         # Server lists the VPN operators publish themselves join the VPN list
         # Hand-picked lists shipped with the code (curated/*.txt), for example reported relay addresses
         # private/*.txt: lists that must not be published, they are only copied to the server

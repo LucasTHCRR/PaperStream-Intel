@@ -37,6 +37,7 @@ class IntelTest(unittest.TestCase):
         write(os.path.join(sets, "tor.txt"), "185.220.101.1\n")
         write(os.path.join(sets, "operators.txt"), "5.6.7.8\n2a07:d883:703:3::f001\n")
         write(os.path.join(sets, "community.txt"), "9.8.7.6\n")
+        write(os.path.join(sets, "rir-hosting.txt"), "9.9.8.0/24\n")
         write(os.path.join(sets, "proxy.txt"), "socks5://8.8.4.4:1080\n[2606:4700::1]:8080\n")
         write(os.path.join(sets, "datacenter.txt"), "34.120.0.0/24\n")
         self.app = intel.create_app(data)
@@ -55,6 +56,12 @@ class IntelTest(unittest.TestCase):
         self.assertEqual(code, 200)
         self.assertEqual((body["network"], body["country"], body["asn"]), ("end_user", "DE", 3320))
         self.assertFalse(any(body[k] for k in ("vpn", "proxy", "tor", "hosting")))
+
+    def test_registry_hosting_range_counts_as_hosting(self):
+        code, body = self.ip("9.9.8.77")
+        self.assertEqual(code, 200)
+        self.assertTrue(body["hosting"])
+        self.assertFalse(body["vpn"])
 
     def test_community_list_counts_as_vpn(self):
         code, body = self.ip("9.8.7.6")

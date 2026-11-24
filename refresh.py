@@ -181,6 +181,52 @@ def operators(target):
     print("operators:", len(found), "addresses in total")
 
 
+RIR_FILES = [
+    ("ripe.db.inetnum.gz", "https://ftp.ripe.net/ripe/dbase/split/ripe.db.inetnum.gz"),
+    ("ripe.db.inet6num.gz", "https://ftp.ripe.net/ripe/dbase/split/ripe.db.inet6num.gz"),
+    ("apnic.db.inetnum.gz", "https://ftp.apnic.net/apnic/whois/apnic.db.inetnum.gz"),
+    ("apnic.db.inet6num.gz", "https://ftp.apnic.net/apnic/whois/apnic.db.inet6num.gz"),
+    ("afrinic.db.gz", "https://ftp.afrinic.net/dbase/afrinic.db.gz"),
+    ("lacnic.db.gz", "https://ftp.lacnic.net/lacnic/dbase/lacnic.db.gz"),
+]
+RIR_EVERY_DAYS = 3
+
+
+def rir(target, work):
+    """Hosting ranges from the public databases of the regional registries (RIPE, APNIC, AFRINIC, LACNIC), found by
+    network name and description. Rebuilt every few days with bin/rirbuild. Only this derived list is kept."""
+    here = pathlib.Path(__file__).resolve().parent
+    binary = here / "bin" / "rirbuild"
+    output = target / "rir-hosting.txt"
+    if not binary.exists():
+        return
+    if output.exists() and time.time() - output.stat().st_mtime < RIR_EVERY_DAYS * 86400:
+        return
+    folder = work / "rir"
+    shutil.rmtree(folder, ignore_errors=True)
+    folder.mkdir(parents=True)
+    try:
+        for name, url in RIR_FILES:
+            part = folder / (name + ".part")
+            result = subprocess.run(["curl", "-sSfL", "--max-time", "900", "-A", UA["User-Agent"], "-o", str(part), url],
+                                    capture_output=True, text=True)
+            if result.returncode:
+                print(f"rir: {name} failed: {result.stderr[-120:]}")
+                return
+            part.rename(folder / name)
+        temporary = target / "rir-hosting.txt.tmp"
+        result = subprocess.run([str(binary), str(folder), str(temporary)], capture_output=True, text=True)
+        lines = temporary.read_text().count("\n") if temporary.exists() else 0
+        if result.returncode or lines < 5000:
+            print("rir: build failed or too short, keeping the old file", result.stderr[-200:])
+            temporary.unlink(missing_ok=True)
+            return
+        os.replace(temporary, output)
+        print("rir:", lines, "ranges")
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
+
+
 JOE = "https://raw.githubusercontent.com/Joe12387/open-source-vpn-ip-lists/master/{}.txt"
 # Public lists of VPN servers: name, url. Joe12387 is CC0, tn3w Apache-2.0, az0 GPL-3.0.
 COMMUNITY = [(f"joe12387-{service}", JOE.format(service)) for service in
@@ -271,5 +317,6 @@ if __name__ == "__main__":
     community(datasets)
     # "quick" skips the heavy part (feed and backup), it runs every four hours
     if "quick" not in sys.argv[1:]:
+        rir(datasets, data / "feedwork")
         feed(datasets, data / "feedwork")
         backup(data)
