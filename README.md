@@ -34,6 +34,8 @@ keeps a salted hash of the address in memory only.
 - `curated/proton.txt`: 926 Proton VPN server addresses from the server list of the official Proton VPN app.
 - Cloud ranges that AWS, Google Cloud, Oracle and DigitalOcean publish count as datacenter space, and the Surfshark servers are resolved from its public server list.
 - Lists of VPN servers that other projects publish, refreshed every four hours: [Joe12387/open-source-vpn-ip-lists](https://github.com/Joe12387/open-source-vpn-ip-lists) (CC0), [tn3w/ProtonVPN-IPs](https://github.com/tn3w/ProtonVPN-IPs) (Apache-2.0) and [az0/vpn_ip](https://github.com/az0/vpn_ip) (GPL-3.0). Thank you!
+- Hosting ranges found in the public databases of the regional registries (RIPE, APNIC, AFRINIC, LACNIC) by network name and description, rebuilt every three days. Only this derived list of ranges is kept, the databases themselves are not stored or passed on.
+- VPN address lists from [NazgulCoder/IPLists](https://github.com/NazgulCoder/IPLists) (MIT), as of 22 November 2026 (`curated/vpn-ipv4.txt`, `curated/vpn-ipv6-txt.txt`).
 - Sightings reported by ProxyShield servers: kept 14 days under a hash of the install id, an address
   counts as `community` from 3 different servers.
 

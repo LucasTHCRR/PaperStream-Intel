@@ -143,6 +143,22 @@ def main():
     window = tk.Tk()
     window.title("PaperStream Intel Listen")
     window.geometry("820x760")
+    back, front, field, accent = "#14171f", "#e4e7ee", "#1e2230", "#3fc1a8"
+    window.configure(bg=back)
+    style = ttk.Style()
+    style.theme_use("clam")
+    style.configure(".", background=back, foreground=front, fieldbackground=field, bordercolor="#2c3245",
+                    lightcolor=back, darkcolor=back, troughcolor=field, focuscolor=back)
+    style.configure("TButton", background="#262c3f", foreground=front, padding=6)
+    style.map("TButton", background=[("active", accent)], foreground=[("active", "#0b0e14")])
+    style.configure("TRadiobutton", background=back, foreground=front)
+    style.map("TRadiobutton", background=[("active", back)], indicatorcolor=[("selected", accent)])
+    style.configure("TEntry", fieldbackground=field, foreground=front, insertcolor=front)
+
+    def text_box(parent, height):
+        return scrolledtext.ScrolledText(parent, height=height, bg=field, fg=front, insertbackground=front,
+                                         selectbackground=accent, selectforeground="#0b0e14", relief="flat",
+                                         highlightthickness=1, highlightbackground="#2c3245")
     messages = queue.Queue()
     state = {"data": None, "new": [], "entries": []}
 
@@ -172,17 +188,38 @@ def main():
                 f"{state['data'].summary()['vpn_ranges']} VPN-Bereiche.")
         background(work)
 
-    def load_files():
-        for path in filedialog.askopenfilenames(title="Listen auswaehlen"):
-            try:
-                content = pathlib.Path(path).read_text(errors="replace")
-            except OSError as error:
-                log(f"FEHLER: {path}: {error}")
+    def read_into_box(path):
+        try:
+            content = path.read_text(errors="replace")
+        except OSError as error:
+            log(f"FEHLER: {path}: {error}")
+            return
+        box.insert("end", content + "\n")
+        if not name.get():
+            name.set(safe_name(path.stem))
+        log(f"Geladen: {path.name}")
+
+    def load_path(event=None):
+        # Pfade getrennt durch Zeilenumbruch oder Semikolon, Ordner laden alle Textdateien darin
+        for raw in re.split(r"[;\n]", path_text.get()):
+            raw = raw.strip().strip("\"'")
+            if not raw:
                 continue
-            box.insert("end", content + "\n")
-            if not name.get():
-                name.set(safe_name(pathlib.Path(path).stem))
-            log(f"Geladen: {pathlib.Path(path).name}")
+            path = pathlib.Path(os.path.expanduser(raw))
+            if path.is_dir():
+                files = sorted(f for f in path.iterdir() if f.suffix.lower() in (".txt", ".csv", ".json", ".list"))
+                log(f"{path}: {len(files)} Dateien")
+                for file in files:
+                    read_into_box(file)
+            elif path.is_file():
+                read_into_box(path)
+            else:
+                log(f"FEHLER: {path} gibt es nicht")
+        path_text.set("")
+
+    def browse():
+        for chosen in filedialog.askopenfilenames(title="Listen auswaehlen", initialdir=os.path.expanduser("~/Downloads")):
+            read_into_box(pathlib.Path(chosen))
 
     def check():
         if state["data"] is None:
@@ -223,10 +260,18 @@ def main():
     ttk.Label(top, text="Name der Liste:").pack(side="left")
     name = tk.StringVar()
     ttk.Entry(top, textvariable=name, width=24).pack(side="left", padx=6)
-    ttk.Button(top, text="Datei laden ...", command=load_files).pack(side="left")
     ttk.Button(top, text="Serverdaten neu holen", command=load_data).pack(side="right")
-    ttk.Label(frame, text="Adressen (Dateien laden oder hier einfuegen, jedes Format):").pack(anchor="w", pady=(8, 2))
-    box = scrolledtext.ScrolledText(frame, height=10)
+    paths = ttk.Frame(frame)
+    paths.pack(fill="x", pady=(8, 0))
+    ttk.Label(paths, text="Pfad:").pack(side="left")
+    path_text = tk.StringVar()
+    path_entry = ttk.Entry(paths, textvariable=path_text)
+    path_entry.pack(side="left", fill="x", expand=True, padx=6)
+    path_entry.bind("<Return>", load_path)
+    ttk.Button(paths, text="Laden", command=load_path).pack(side="left")
+    ttk.Button(paths, text="...", width=3, command=browse).pack(side="left", padx=(6, 0))
+    ttk.Label(frame, text="Adressen (Pfad eintippen, Ordner geht auch, oder hier einfuegen):").pack(anchor="w", pady=(8, 2))
+    box = text_box(frame, 10)
     box.pack(fill="both", expand=True)
     options = ttk.Frame(frame)
     options.pack(fill="x", pady=6)
@@ -236,7 +281,7 @@ def main():
     ttk.Button(frame, text="1. Pruefen", command=check).pack(anchor="w")
     summary = tk.StringVar(value="Noch nicht geprueft.")
     ttk.Label(frame, textvariable=summary).pack(anchor="w", pady=4)
-    result = scrolledtext.ScrolledText(frame, height=7)
+    result = text_box(frame, 7)
     result.pack(fill="both", expand=True)
     steps = ttk.Frame(frame)
     steps.pack(fill="x", pady=8)
@@ -245,7 +290,7 @@ def main():
     message = tk.StringVar(value="Add list of addresses")
     ttk.Button(steps, text="4. Commit + Push", command=push).pack(side="right")
     ttk.Entry(steps, textvariable=message, width=34).pack(side="right", padx=6)
-    output = scrolledtext.ScrolledText(frame, height=8, state="normal")
+    output = text_box(frame, 8)
     output.pack(fill="both", expand=True)
     pump()
     load_data()
