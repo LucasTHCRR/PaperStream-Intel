@@ -44,6 +44,26 @@ class CloudParsingTest(unittest.TestCase):
         self.assertEqual(refresh.digitalocean(text), {"5.101.96.0/21", "24.144.64.0/22"})
 
 
+class RollingTest(unittest.TestCase):
+    def test_address_stays_for_the_given_days_after_it_left_the_list(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = pathlib.Path(folder)
+            day = 86400
+            (target / "proxy.txt").write_text("socks5://1.2.3.4:1080\n8.8.4.4:3128\n")
+            refresh.rolling(target, "proxy", 10, now=1000 * day)
+            (target / "proxy.txt").write_text("http://5.6.7.8:80\n")
+            refresh.rolling(target, "proxy", 10, now=1005 * day)
+            self.assertEqual((target / "proxy.txt").read_text().split(), ["1.2.3.4", "5.6.7.8", "8.8.4.4"])
+            (target / "proxy.txt").write_text("http://5.6.7.8:80\n")
+            refresh.rolling(target, "proxy", 10, now=1011 * day)
+            self.assertEqual((target / "proxy.txt").read_text().split(), ["5.6.7.8"])
+
+    def test_missing_list_is_left_alone(self):
+        with tempfile.TemporaryDirectory() as folder:
+            refresh.rolling(pathlib.Path(folder), "tor", 3)
+            self.assertEqual(list(pathlib.Path(folder).iterdir()), [])
+
+
 class CanaryTest(unittest.TestCase):
     def setup_data(self, folder, canary_text="1.2.3.4\n"):
         data = pathlib.Path(folder)

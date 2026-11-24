@@ -12,7 +12,7 @@ import sys
 import time
 import urllib.request
 
-from datasets import Datasets, parse_entry
+from datasets import ENTRY, Datasets, parse_entry
 
 SOURCES = {
     "vpn": ["https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/vpn/ipv4.txt",
@@ -20,7 +20,10 @@ SOURCES = {
     "datacenter": ["https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/datacenter/ipv4.txt",
                    "https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/datacenter/ipv6.txt"],
     "tor": ["https://check.torproject.org/torbulkexitlist"],
-    "proxy": ["https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt"],
+    # monosans (MIT), vakhov (MIT), proxifly (GPL-3.0): open proxies that are listed as working today
+    "proxy": ["https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/all.txt",
+              "https://raw.githubusercontent.com/vakhov/fresh-proxy-list/master/proxylist.txt",
+              "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/all/data.txt"],
 }
 MINIMUM_LINES = {"vpn": 1000, "datacenter": 1000, "tor": 100, "proxy": 100}
 UA = {"User-Agent": "PaperStream-Intel/1.0 (support@paperstream.dev)"}
@@ -46,6 +49,28 @@ def lists(target):
             continue
         replace(target / f"{name}.txt", text)
         print(f"{name}: {text.count(chr(10).encode())} lines")
+
+
+def rolling(target, name, days, now=None):
+    """Open proxies and Tor exits come and go. An address stays on the list for some days after the last time it was
+    seen, so a list that is a day old does not already let it through. The history lives next to the list."""
+    path = target / f"{name}.txt"
+    history = target / f"{name}-history.json"
+    if not path.exists():
+        return
+    now = int(now if now is not None else time.time())
+    try:
+        seen = json.loads(history.read_text()) if history.exists() else {}
+    except ValueError:
+        seen = {}
+    for line in path.read_text().splitlines():
+        match = ENTRY.match(line.strip()) if line.strip() and not line.startswith("#") else None
+        if match:
+            seen[match.group(1).strip("[]")] = now
+    seen = {host: stamp for host, stamp in seen.items() if now - stamp < days * 86400}
+    replace(history, json.dumps(seen).encode())
+    replace(path, ("\n".join(sorted(seen)) + "\n").encode())
+    print(f"{name}: {len(seen)} addresses (kept {days} days)")
 
 
 def fetch_json(url, first_line=False):
@@ -366,6 +391,8 @@ if __name__ == "__main__":
     datasets.mkdir(parents=True, exist_ok=True)
     previous = snapshot(datasets, data) if any(datasets.iterdir()) else None
     lists(datasets)
+    rolling(datasets, "proxy", 10)
+    rolling(datasets, "tor", 3)
     operators(datasets)
     clouds(datasets)
     community(datasets)
