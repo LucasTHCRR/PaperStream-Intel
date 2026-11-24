@@ -9,8 +9,9 @@ no access logs. Live at [intel.paperstream.dev](https://intel.paperstream.dev), 
 ## API
 
 ```
-GET  /v1/ip/{ip}              verdict: network, country, asn, vpn, proxy, tor, hosting, seen_by, community
+GET  /v1/ip/{ip}              verdict: network, country, asn, vpn, proxy, tor, hosting, reasons (why), score (0 to 100), seen_by, community
 GET  /v1/me                   the same for the address that asks
+POST /v1/bulk                 {"ips": [...up to 50]}, answers {"results": [...]}, every address counts as one lookup
 GET  /v1/stats?days=7         answered lookups of the last 7 days (no days = all time) and dataset sizes
 GET  /v1/stats/daily?days=30  answered lookups per day
 GET  /feed/asn-feed.tsv.gz    network feed for offline use

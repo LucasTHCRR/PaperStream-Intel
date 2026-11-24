@@ -14,10 +14,11 @@ import time
 
 from flask import redirect, Flask, Response, jsonify, request, send_file
 
-from datasets import Datasets
+from datasets import Datasets, SCORES, score
 
 LOOKUPS_PER_MINUTE = 600
 STALE_HOURS = 48
+BULK_MAX = 50
 REPORTS_PER_MINUTE = 30
 REPORT_BATCH = 200
 REPORTS_PER_DAY = 2000
@@ -199,19 +200,46 @@ def create_app(data_dir=None, datasets_dir=None):
         """Answered lookups per day for the last `days` days (default 30), for filters and charts."""
         return jsonify(series(days_argument(30)))
 
-    def answer(text):
+    def verdict(text):
+        """The answer for one address, or None if the text is not an address."""
         try:
             address = ipaddress.ip_address(text)
         except ValueError:
-            return jsonify(error="not an IP address"), 422
+            return None
         if not address.is_global:
-            return jsonify(ip=str(address), country=None, asn=None, network="private", vpn=False, proxy=False,
-                           tor=False, hosting=False, seen_by=0, community=False)
+            return dict(ip=str(address), country=None, asn=None, network="private", vpn=False, proxy=False,
+                        tor=False, hosting=False, reasons=[], score=0, seen_by=0, community=False)
         result = datasets().lookup(address)
         seen = sightings(str(address))
-        result.update(seen_by=seen, community=seen >= COMMUNITY_SERVERS)
+        community = seen >= COMMUNITY_SERVERS
+        if community:
+            result["reasons"] = sorted(result["reasons"] + ["reported-by-servers"], key=lambda name: -SCORES[name])
+            result["score"] = score(result["reasons"])
+        result.update(seen_by=seen, community=community)
         count(any(result[key] for key in ("vpn", "proxy", "tor", "hosting")) or result["community"])
+        return result
+
+    def answer(text):
+        result = verdict(text)
+        if result is None:
+            return jsonify(error="not an IP address"), 422
         return jsonify(result)
+
+    @app.post("/v1/bulk")
+    def bulk():
+        """Up to 50 addresses in one request, each counts as a lookup for the rate limit."""
+        body = request.get_json(silent=True)
+        ips = body.get("ips") if isinstance(body, dict) else None
+        if not isinstance(ips, list) or not ips or len(ips) > BULK_MAX or not all(isinstance(x, str) for x in ips):
+            return jsonify(error=f"send {{\"ips\": [...]}} with 1 to {BULK_MAX} addresses"), 422
+        for _ in ips:
+            if limited("lookup", LOOKUPS_PER_MINUTE):
+                return too_many()
+        results = []
+        for text in ips:
+            result = verdict(text.strip())
+            results.append(result if result is not None else {"ip": text, "error": "not an IP address"})
+        return jsonify(results=results)
 
     @app.get("/v1/ip/<text>")
     def lookup(text):

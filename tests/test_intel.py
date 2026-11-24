@@ -82,6 +82,44 @@ class IntelTest(unittest.TestCase):
         self.assertEqual(body["canary"]["checked"], 362)
         self.assertTrue(body["canary"]["ok"])
 
+    def test_answer_names_the_reasons_and_gives_a_score(self):
+        code, body = self.ip("5.6.7.8")
+        self.assertEqual(body["reasons"], ["vpn-operator"])
+        self.assertEqual(body["score"], 100)
+        code, body = self.ip("185.220.101.1")
+        self.assertEqual(body["reasons"], ["tor-exit"])
+        self.assertEqual(body["score"], 95)
+        code, body = self.ip("9.9.8.77")
+        self.assertEqual(body["reasons"], ["registry-hosting"])
+        self.assertEqual(body["score"], 55)
+
+    def test_clean_address_has_no_reasons(self):
+        code, body = self.ip("80.187.100.44")
+        self.assertEqual(body["reasons"], [])
+        self.assertEqual(body["score"], 0)
+
+    def test_several_reasons_add_a_little_to_the_score(self):
+        from datasets import score
+        self.assertEqual(score([]), 0)
+        self.assertEqual(score(["datacenter-list"]), 55)
+        self.assertEqual(score(["vpn-list", "datacenter-list"]), 95)
+        self.assertEqual(score(["vpn-operator", "tor-exit", "vpn-list", "open-proxy"]), 100)
+
+    def test_bulk_answers_every_address_and_marks_the_wrong_ones(self):
+        response = self.client.post("/v1/bulk", json={"ips": ["5.6.7.8", "nonsense", "80.187.100.44", "10.0.0.1"]})
+        self.assertEqual(response.status_code, 200)
+        results = response.get_json()["results"]
+        self.assertEqual([r["ip"] for r in results], ["5.6.7.8", "nonsense", "80.187.100.44", "10.0.0.1"])
+        self.assertTrue(results[0]["vpn"])
+        self.assertEqual(results[1]["error"], "not an IP address")
+        self.assertFalse(results[2]["vpn"])
+        self.assertEqual(results[3]["network"], "private")
+
+    def test_bulk_rejects_empty_and_too_long_requests(self):
+        self.assertEqual(self.client.post("/v1/bulk", json={"ips": []}).status_code, 422)
+        self.assertEqual(self.client.post("/v1/bulk", json={"ips": ["8.8.8.8"] * 51}).status_code, 422)
+        self.assertEqual(self.client.post("/v1/bulk", data="not json").status_code, 422)
+
     def test_registry_hosting_range_counts_as_hosting(self):
         code, body = self.ip("9.9.8.77")
         self.assertEqual(code, 200)

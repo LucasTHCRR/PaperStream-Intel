@@ -34,6 +34,14 @@ class RangeSet:
             self.starts[version] = [start for start, _ in merged]
         return self
 
+    @classmethod
+    def union(cls, *sets):
+        merged = cls()
+        for one in sets:
+            for version in (4, 6):
+                merged.ranges[version].extend(one.ranges[version])
+        return merged.seal()
+
     def contains(self, address):
         version = address.version
         value = int(address)
@@ -74,6 +82,12 @@ def read_list(*paths):
     return ranges.seal()
 
 
+def score(reasons):
+    """The strongest reason counts fully, every further different reason adds 5, at most 100."""
+    values = sorted((SCORES[name] for name in reasons), reverse=True)
+    return min(100, values[0] + 5 * (len(values) - 1)) if values else 0
+
+
 class Feed:
     """Lines "start end class country asn version": E many end users, S small access network, H hosting-like,
     N no measured end users."""
@@ -111,25 +125,45 @@ class Feed:
         return None
 
 
+# How much a reason weighs for the score (0 to 100). A rough measure, not a probability.
+SCORES = {
+    "vpn-operator": 100, "tor-exit": 95, "vpn-list": 90, "vpn-community": 85, "open-proxy": 80,
+    "reported-by-servers": 70, "registry-hosting": 55, "datacenter-list": 55, "cloud-range": 55, "network-hosting": 50,
+}
+
+
 class Datasets:
     def __init__(self, directory):
         self.directory = pathlib.Path(directory)
         self.feed = Feed(self.directory / "asn-feed.tsv.gz")
-        self.lists = {name: read_list(self.directory / f"{name}.txt") for name in LISTS}
-        # Ranges the cloud providers publish and hosting ranges found in the registries' databases count as datacenter space
-        self.lists["datacenter"] = read_list(self.directory / "datacenter.txt", self.directory / "clouds.txt",
-                                             self.directory / "rir-hosting.txt")
-        # Server lists the VPN operators publish themselves join the VPN list
-        # Hand-picked lists shipped with the code (curated/*.txt), for example reported relay addresses
-        # private/*.txt: lists that must not be published, they are only copied to the server
+        # Hand-picked lists shipped with the code (curated/*.txt), private/*.txt are only copied to the server
         here = pathlib.Path(__file__).parent
         curated = sorted((here / "curated").glob("*.txt")) + sorted((here / "private").glob("*.txt"))
-        self.lists["vpn"] = read_list(self.directory / "vpn.txt", self.directory / "operators.txt",
-                                      self.directory / "community.txt", *curated)
+        # One set per source, so every answer can say why it was given
+        self.sources = {
+            "vpn-list": read_list(self.directory / "vpn.txt"),
+            "vpn-operator": read_list(self.directory / "operators.txt"),
+            "vpn-community": read_list(self.directory / "community.txt", *curated),
+            "datacenter-list": read_list(self.directory / "datacenter.txt"),
+            "cloud-range": read_list(self.directory / "clouds.txt"),
+            "registry-hosting": read_list(self.directory / "rir-hosting.txt"),
+            "tor-exit": read_list(self.directory / "tor.txt"),
+            "open-proxy": read_list(self.directory / "proxy.txt"),
+        }
+        S = self.sources
+        self.lists = {
+            "vpn": RangeSet.union(S["vpn-list"], S["vpn-operator"], S["vpn-community"]),
+            "datacenter": RangeSet.union(S["datacenter-list"], S["cloud-range"], S["registry-hosting"]),
+            "tor": S["tor-exit"],
+            "proxy": S["open-proxy"],
+        }
 
     def lookup(self, address):
         found = self.feed.find(address)
         kind, country, asn = found if found else (None, None, None)
+        reasons = [name for name, ranges in self.sources.items() if ranges.contains(address)]
+        if kind == "H":
+            reasons.append("network-hosting")
         return {
             "ip": str(address),
             "country": country,
@@ -139,6 +173,8 @@ class Datasets:
             "proxy": self.lists["proxy"].contains(address),
             "tor": self.lists["tor"].contains(address),
             "hosting": kind == "H" or self.lists["datacenter"].contains(address),
+            "reasons": sorted(reasons, key=lambda name: -SCORES[name]),
+            "score": score(reasons),
         }
 
     def summary(self):
