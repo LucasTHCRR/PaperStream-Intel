@@ -42,6 +42,10 @@ keeps a salted hash of the address in memory only.
 `refresh.py` downloads and rebuilds all of it nightly and keeps the old file when a source fails.
 It also writes a consistent copy of the database to `backup/` and keeps the last seven.
 
+## Quality check
+
+After every refresh, a list of real home and mobile addresses (kept on the server, not in the repository) is looked up in the new data. If the update flags one that the previous data did not, the previous data come back, the status says so and `/healthz` fails.
+
 ## Privacy by construction
 
 - No access logs. Lookups are answered from the data and not stored.

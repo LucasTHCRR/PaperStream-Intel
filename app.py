@@ -270,6 +270,13 @@ def create_app(data_dir=None, datasets_dir=None):
                 rows = sorted(diag.items(), key=lambda item: -item[1])
             return jsonify([{"endpoint": k[0], "client": k[1], "count": n} for k, n in rows])
 
+    def canary_status():
+        """Result of the last check with known good addresses (written by refresh.py), None if there is none."""
+        try:
+            return json.loads((data / "canary.json").read_text())
+        except (OSError, ValueError):
+            return None
+
     @app.get("/healthz")
     def healthz():
         ages = {}
@@ -277,8 +284,57 @@ def create_app(data_dir=None, datasets_dir=None):
             path = sets_dir / name
             ages[name] = round((time.time() - path.stat().st_mtime) / 3600, 1) if path.exists() else None
         stale = [name for name, age in ages.items() if age is None or age > STALE_HOURS]
+        canary = canary_status()
+        if canary and not canary.get("ok", True):
+            stale.append("canary")
         status = 503 if stale else 200
-        return jsonify(ok=not stale, stale=stale, age_hours=ages, load=load()), status
+        return jsonify(ok=not stale, stale=stale, age_hours=ages, load=load(),
+                       canary=None if canary is None else {k: canary.get(k) for k in ("ok", "checked", "flagged", "rolled_back")}), status
+
+    started_at = int(time.time())
+    counted = {}
+
+    def line_count(name):
+        path = sets_dir / name
+        try:
+            stamp = path.stat().st_mtime
+        except OSError:
+            return None
+        cached = counted.get(name)
+        if cached and cached[0] == stamp:
+            return cached[1]
+        with path.open("rb") as handle:
+            count = sum(1 for line in handle if line.strip() and not line.startswith(b"#"))
+        counted[name] = (stamp, count)
+        return count
+
+    @app.get("/v1/status")
+    def public_status():
+        """What the status page shows: how fresh the data are, how big, and whether the quality check passed."""
+        sources = [
+            ("Network feed", "asn-feed.tsv.gz", "iptoasn.com, APNIC", None),
+            ("VPN and datacenter lists", "vpn.txt", "X4BNet lists_vpn", None),
+            ("VPN operator relays", "operators.txt", "Mullvad, IVPN, NordVPN, PIA, Surfshark", None),
+            ("Cloud provider ranges", "clouds.txt", "AWS, Google Cloud, Oracle, DigitalOcean", None),
+            ("Hosting ranges from the registries", "rir-hosting.txt", "RIPE, APNIC, AFRINIC, LACNIC", None),
+            ("Community VPN lists", "community.txt", "Joe12387, tn3w, az0", None),
+            ("Tor exit nodes", "tor.txt", "Tor Project", None),
+            ("Open proxies", "proxy.txt", "monosans", None),
+        ]
+        rows = []
+        for title, name, origin, _ in sources:
+            path = sets_dir / name
+            age = round((time.time() - path.stat().st_mtime) / 3600, 1) if path.exists() else None
+            rows.append({"name": title, "origin": origin, "age_hours": age,
+                         "entries": None if name == "asn-feed.tsv.gz" else line_count(name)})
+        summary = datasets().summary()
+        rows[0]["entries"] = summary.get("feed_ranges")
+        canary = canary_status()
+        stale = [r["name"] for r in rows if r["age_hours"] is None or r["age_hours"] > STALE_HOURS * 2]
+        return jsonify(ok=not stale and (canary is None or canary.get("ok", True)), up_since=started_at,
+                       data=rows, feed_built=summary.get("feed_built"),
+                       canary=None if canary is None else {"checked": canary.get("checked"), "flagged": canary.get("flagged"),
+                                                           "ok": canary.get("ok"), "checked_at": canary.get("checked_at")})
 
     @app.get("/feed/asn-feed.tsv.gz")
     def feed():

@@ -1,5 +1,8 @@
+import json
 import os
+import pathlib
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -39,6 +42,51 @@ class CloudParsingTest(unittest.TestCase):
     def test_digitalocean_csv(self):
         text = "5.101.96.0/21,NL,NL-NH,Amsterdam,1098 XH\n<html>\n24.144.64.0/22,US,US-NJ,North Bergen,07047\n"
         self.assertEqual(refresh.digitalocean(text), {"5.101.96.0/21", "24.144.64.0/22"})
+
+
+class CanaryTest(unittest.TestCase):
+    def setup_data(self, folder, canary_text="1.2.3.4\n"):
+        data = pathlib.Path(folder)
+        datasets = data / "datasets"
+        datasets.mkdir()
+        (datasets / "vpn.txt").write_text("9.9.9.0/24\n")
+        (data / "canary.txt").write_text(canary_text)
+        previous = refresh.snapshot(datasets, data)
+        return data, datasets, previous
+
+    def test_update_that_flags_a_real_player_is_rolled_back(self):
+        with tempfile.TemporaryDirectory() as folder:
+            data, datasets, previous = self.setup_data(folder)
+            (datasets / "vpn.txt").write_text("9.9.9.0/24\n1.2.3.0/24\n")
+            refresh.canary(datasets, previous, data)
+            self.assertEqual((datasets / "vpn.txt").read_text(), "9.9.9.0/24\n")
+            status = json.loads((data / "canary.json").read_text())
+            self.assertFalse(status["ok"])
+            self.assertTrue(status["rolled_back"])
+            self.assertEqual(status["lists"], ["vpn"])
+
+    def test_clean_update_stays(self):
+        with tempfile.TemporaryDirectory() as folder:
+            data, datasets, previous = self.setup_data(folder)
+            (datasets / "vpn.txt").write_text("9.9.9.0/24\n8.8.8.0/24\n")
+            refresh.canary(datasets, previous, data)
+            self.assertIn("8.8.8.0/24", (datasets / "vpn.txt").read_text())
+            status = json.loads((data / "canary.json").read_text())
+            self.assertTrue(status["ok"])
+            self.assertFalse(status["rolled_back"])
+
+    def test_address_already_flagged_before_does_not_cause_a_rollback(self):
+        with tempfile.TemporaryDirectory() as folder:
+            data = pathlib.Path(folder)
+            datasets = data / "datasets"
+            datasets.mkdir()
+            (datasets / "vpn.txt").write_text("1.2.3.0/24\n")
+            (data / "canary.txt").write_text("1.2.3.4\n")
+            previous = refresh.snapshot(datasets, data)
+            (datasets / "vpn.txt").write_text("1.2.3.0/24\n5.5.5.0/24\n")
+            refresh.canary(datasets, previous, data)
+            self.assertIn("5.5.5.0/24", (datasets / "vpn.txt").read_text())
+            self.assertTrue(json.loads((data / "canary.json").read_text())["ok"])
 
 
 class BackupTest(unittest.TestCase):

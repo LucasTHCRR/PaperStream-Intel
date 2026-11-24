@@ -57,6 +57,31 @@ class IntelTest(unittest.TestCase):
         self.assertEqual((body["network"], body["country"], body["asn"]), ("end_user", "DE", 3320))
         self.assertFalse(any(body[k] for k in ("vpn", "proxy", "tor", "hosting")))
 
+    def test_public_status_lists_the_data_with_age_and_size(self):
+        response = self.client.get("/v1/status")
+        self.assertEqual(response.status_code, 200)
+        body = response.get_json()
+        names = {row["name"]: row for row in body["data"]}
+        self.assertEqual(names["Network feed"]["entries"], 4)
+        self.assertEqual(names["Community VPN lists"]["entries"], 1)
+        self.assertIsNotNone(names["Tor exit nodes"]["age_hours"])
+        self.assertNotIn("load", body)
+
+    def test_failed_canary_check_makes_the_health_check_fail(self):
+        write(os.path.join(self.directory.name, "canary.json"),
+              '{"ok": false, "checked": 10, "flagged": 1, "rolled_back": true, "checked_at": 1}')
+        response = self.client.get("/healthz")
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("canary", response.get_json()["stale"])
+        self.assertEqual(response.get_json()["canary"]["flagged"], 1)
+
+    def test_passed_canary_check_is_shown(self):
+        write(os.path.join(self.directory.name, "canary.json"),
+              '{"ok": true, "checked": 362, "flagged": 0, "rolled_back": false, "checked_at": 1}')
+        body = self.client.get("/v1/status").get_json()
+        self.assertEqual(body["canary"]["checked"], 362)
+        self.assertTrue(body["canary"]["ok"])
+
     def test_registry_hosting_range_counts_as_hosting(self):
         code, body = self.ip("9.9.8.77")
         self.assertEqual(code, 200)

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 """Downloads the public lists and rebuilds the network feed. Run daily, keeps the old file when a source fails."""
+import ipaddress
 import json
 import os
 import pathlib
@@ -11,7 +12,7 @@ import sys
 import time
 import urllib.request
 
-from datasets import parse_entry
+from datasets import Datasets, parse_entry
 
 SOURCES = {
     "vpn": ["https://raw.githubusercontent.com/X4BNet/lists_vpn/main/output/vpn/ipv4.txt",
@@ -307,10 +308,63 @@ def backup(data):
     print("backup:", target.name)
 
 
+CANARY_FILE = "canary.txt"
+
+
+def snapshot(datasets, data):
+    """A copy of the current data, to come back to if the new data flags a real player."""
+    previous = data / "datasets.prev"
+    shutil.rmtree(previous, ignore_errors=True)
+    shutil.copytree(datasets, previous)
+    return previous
+
+
+def flagged_canaries(path, addresses):
+    sets = Datasets(path)
+    found = set()
+    for text in addresses:
+        try:
+            result = sets.lookup(ipaddress.ip_address(text))
+        except ValueError:
+            continue
+        if result["vpn"] or result["proxy"] or result["tor"] or result["hosting"]:
+            found.add(text)
+    return found, sets
+
+
+def canary(datasets, previous, data):
+    """Addresses of real players (home and mobile connections) must not be flagged by new data. If the update flags
+    one that the old data did not, the old data come back and the status says so. The canary list stays on the
+    server and out of the repository: it holds addresses of real people."""
+    path = data / CANARY_FILE
+    status = data / "canary.json"
+    if not path.exists() or previous is None:
+        return
+    addresses = [line.strip() for line in path.read_text().splitlines() if line.strip() and not line.startswith("#")]
+    new_flagged, sets = flagged_canaries(datasets, addresses)
+    old_flagged, _ = flagged_canaries(previous, addresses)
+    fresh = sorted(new_flagged - old_flagged)
+    rolled_back = False
+    offenders = []
+    if fresh:
+        for name, ranges in sets.lists.items():
+            if any(ranges.contains(ipaddress.ip_address(a)) for a in fresh):
+                offenders.append(name)
+        print(f"canary: the update flags {len(fresh)} real address(es), lists: {offenders}. Restoring the old data.")
+        shutil.rmtree(datasets)
+        shutil.copytree(previous, datasets)
+        rolled_back = True
+    else:
+        print(f"canary: ok, {len(addresses)} addresses checked")
+    replace(status, json.dumps({"checked_at": int(time.time()), "checked": len(addresses), "flagged": len(fresh),
+                                "ok": not fresh, "rolled_back": rolled_back, "lists": offenders}).encode())
+
+
 if __name__ == "__main__":
     data = pathlib.Path(os.environ.get("INTEL_DATA", "data"))
     datasets = data / "datasets"
     datasets.mkdir(parents=True, exist_ok=True)
+    previous = snapshot(datasets, data) if any(datasets.iterdir()) else None
     lists(datasets)
     operators(datasets)
     clouds(datasets)
@@ -319,4 +373,6 @@ if __name__ == "__main__":
     if "quick" not in sys.argv[1:]:
         rir(datasets, data / "feedwork")
         feed(datasets, data / "feedwork")
+    canary(datasets, previous, data)
+    if "quick" not in sys.argv[1:]:
         backup(data)
