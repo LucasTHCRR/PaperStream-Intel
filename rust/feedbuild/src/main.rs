@@ -18,7 +18,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 const MIN_USERS: f64 = 50_000.0;
 const UA: &str = "PaperStream-Feed/0 (support@paperstream.dev)";
 const CLOUD: &str = r"(?i)\b(amazon|aws|google|microsoft|azure|ovh|hetzner|digitalocean|linode|akamai|vultr|choopa|contabo|leaseweb|m247|scaleway|oracle|alibaba|tencent|cloudflare|ionos|packet|datacamp|zenlayer|psychz|quadranet|colocrossing|frantech|buyvm|serverius|stark industries|hostinger|namecheap)\b";
-const HOSTING: &str = r"(?i)\b(hosting|hoster|host|cloud|server|servers|vps|datacenter|data center|colo|colocation|dedicated|cdn|vpn|proxy|transit)\b";
+const HOSTING: &str = r"(?i)\b(hosting|hoster|host|cloud|server|servers|vps|datacenter|data center|colo|colocation|dedicated|cdn|vpn|proxy)\b";
 const ISPISH: &str = r"(?i)\b(isp|internet service|telecom|telekom|broadband|cable|mobile|wireless|communications?|telephone|fibre|fiber|dsl)\b";
 const WORKERS: usize = 4;
 

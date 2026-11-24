@@ -31,7 +31,7 @@ CLOUD = re.compile(
     r"psychz|quadranet|colocrossing|frantech|buyvm|serverius|stark industries|hostinger|namecheap)\b", re.I)
 HOSTING = re.compile(
     r"\b(hosting|hoster|host|cloud|server|servers|vps|datacenter|data center|colo|colocation|dedicated|"
-    r"cdn|vpn|proxy|transit)\b", re.I)
+    r"cdn|vpn|proxy)\b", re.I)
 ISPISH = re.compile(
     r"\b(isp|internet service|telecom|telekom|broadband|cable|mobile|wireless|communications?|"
     r"telephone|fibre|fiber|dsl)\b", re.I)

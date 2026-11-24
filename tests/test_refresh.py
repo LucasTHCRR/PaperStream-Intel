@@ -58,6 +58,13 @@ class RollingTest(unittest.TestCase):
             refresh.rolling(target, "proxy", 10, now=1011 * day)
             self.assertEqual((target / "proxy.txt").read_text().split(), ["5.6.7.8"])
 
+    def test_ranges_keep_their_prefix(self):
+        with tempfile.TemporaryDirectory() as folder:
+            target = pathlib.Path(folder)
+            (target / "community.txt").write_text("203.0.113.0/24\n198.51.100.7\n")
+            refresh.rolling(target, "community", 7, now=100 * 86400)
+            self.assertEqual((target / "community.txt").read_text().split(), ["198.51.100.7", "203.0.113.0/24"])
+
     def test_missing_list_is_left_alone(self):
         with tempfile.TemporaryDirectory() as folder:
             refresh.rolling(pathlib.Path(folder), "tor", 3)

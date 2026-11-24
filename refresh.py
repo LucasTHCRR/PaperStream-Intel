@@ -66,7 +66,7 @@ def rolling(target, name, days, now=None):
     for line in path.read_text().splitlines():
         match = ENTRY.match(line.strip()) if line.strip() and not line.startswith("#") else None
         if match:
-            seen[match.group(1).strip("[]")] = now
+            seen[match.group(1).strip("[]") + (f"/{match.group(2)}" if match.group(2) else "")] = now
     seen = {host: stamp for host, stamp in seen.items() if now - stamp < days * 86400}
     replace(history, json.dumps(seen).encode())
     replace(path, ("\n".join(sorted(seen)) + "\n").encode())
@@ -394,8 +394,10 @@ if __name__ == "__main__":
     rolling(datasets, "proxy", 10)
     rolling(datasets, "tor", 3)
     operators(datasets)
+    rolling(datasets, "operators", 14)
     clouds(datasets)
     community(datasets)
+    rolling(datasets, "community", 7)
     # "quick" skips the heavy part (feed and backup), it runs every four hours
     if "quick" not in sys.argv[1:]:
         rir(datasets, data / "feedwork")
